@@ -1,0 +1,14 @@
+services:
+  oneresponse:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - oneresponse-data:/app/data
+    environment:
+      - PORT=3000
+      - DB_PATH=/app/data/oneresponse.db
+    restart: unless-stopped
+
+volumes:
+  oneresponse-data:
