@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, type Target, type Measurement } from '../api/client';
 import TimeSeriesGraph from '../components/TimeSeriesGraph';
@@ -11,12 +11,23 @@ const TIME_RANGES = [
   { label: '30d', seconds: 2592000 },
 ];
 
+// Bucket size (seconds) to keep transferred points <= ~500
+function bucketForRange(rangeSec: number): number {
+  if (rangeSec <= 86400) return 0;       // ≤ 24h → raw points
+  if (rangeSec <= 604800) return 1800;   // 7d → 30-min buckets (≈ 336)
+  return 7200;                            // 30d → 2-hour buckets (≈ 360)
+}
+
 export default function TargetDetail() {
   const { id } = useParams<{ id: string }>();
   const [target, setTarget] = useState<Target | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [range, setRange] = useState(86400);
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [loading, setLoading] = useState(true);
+
+  const from = now - range;
+  const to = now;
 
   useEffect(() => {
     if (!id) return;
@@ -26,12 +37,20 @@ export default function TargetDetail() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    const from = Math.floor(Date.now() / 1000) - range;
-    api.getMeasurements(id, from).then(m => {
+    const t = Math.floor(Date.now() / 1000);
+    setNow(t);
+    const f = t - range;
+    const bucket = bucketForRange(range);
+    api.getMeasurements(id, f, t, bucket).then(m => {
       setMeasurements(m);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [id, range]);
+
+  const exportUrl = useMemo(
+    () => id ? api.exportMeasurementsCsvUrl(id, from, to) : '',
+    [id, from, to],
+  );
 
   if (!target) return <div style={{ padding: 40, color: '#999' }}>Loading...</div>;
 
@@ -45,7 +64,7 @@ export default function TargetDetail() {
         {target.host} {target.site_code && `(${target.site_code})`} &mdash; every {target.probe_interval}s, {target.probe_count} pings
       </p>
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         {TIME_RANGES.map(r => (
           <button
             key={r.label}
@@ -63,15 +82,36 @@ export default function TargetDetail() {
             {r.label}
           </button>
         ))}
+        <div style={{ flex: 1 }} />
+        <a
+          href={exportUrl}
+          style={{
+            padding: '4px 14px',
+            background: '#0f172a',
+            color: '#fff',
+            borderRadius: 4,
+            fontSize: 13,
+            textDecoration: 'none',
+            fontWeight: 600,
+          }}
+        >
+          Export CSV
+        </a>
       </div>
 
-      {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>Loading measurements...</div>
-      ) : (
-        <div style={{ background: '#fff', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <TimeSeriesGraph measurements={measurements} title={`${target.name} — Latency`} />
-        </div>
-      )}
+      <div style={{ background: '#fff', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', position: 'relative' }}>
+        {loading && (
+          <div style={{ position: 'absolute', top: 12, right: 16, color: '#94a3b8', fontSize: 12 }}>
+            Loading…
+          </div>
+        )}
+        <TimeSeriesGraph
+          measurements={measurements}
+          title={`${target.name} — Latency`}
+          from={from}
+          to={to}
+        />
+      </div>
     </div>
   );
 }

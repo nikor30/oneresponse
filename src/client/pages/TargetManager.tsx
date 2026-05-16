@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, type Target, type Group } from '../api/client';
+import CsvIO from '../components/CsvIO';
 
 const emptyForm = { group_id: '', name: '', host: '', site_code: '', probe_interval: 300, probe_count: 20, enabled: 1 };
 
@@ -53,7 +54,15 @@ export default function TargetManager() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginBottom: 16 }}>Targets</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <h1 style={{ fontSize: 22, margin: 0 }}>Targets</h1>
+        <CsvIO
+          exportUrl={api.exportTargetsCsvUrl()}
+          exportFilename="targets.csv"
+          onImport={api.importTargetsCsv}
+          onImported={load}
+        />
+      </div>
 
       {groups.length === 0 && (
         <div style={{ padding: 16, background: '#fff3cd', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
