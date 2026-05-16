@@ -8,71 +8,86 @@ Chart.register(...registerables);
 interface Props {
   measurements: Measurement[];
   title?: string;
+  // Optional explicit X-axis range (unix seconds). When set, the time axis
+  // spans [from, to] even if measurements only cover part of it — so picking
+  // 30d shows a real 30-day window instead of zooming into recent data.
+  from?: number;
+  to?: number;
 }
 
-export default function TimeSeriesGraph({ measurements, title }: Props) {
+export default function TimeSeriesGraph({ measurements, title, from, to }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
 
   useEffect(() => {
-    if (!canvasRef.current || measurements.length === 0) return;
+    if (!canvasRef.current) return;
 
     // Sort by timestamp ascending
     const sorted = [...measurements].sort((a, b) => a.timestamp - b.timestamp);
 
-    const labels = sorted.map(m => new Date(m.timestamp * 1000));
-    const avgData = sorted.map(m => m.latency_avg);
-    const minData = sorted.map(m => m.latency_min);
-    const maxData = sorted.map(m => m.latency_max);
+    const points = sorted.map(m => ({ x: m.timestamp * 1000, y: m.latency_avg }));
+    const minPoints = sorted.map(m => ({ x: m.timestamp * 1000, y: m.latency_min }));
+    const maxPoints = sorted.map(m => ({ x: m.timestamp * 1000, y: m.latency_max }));
     const lossData = sorted.map(m => m.loss_pct);
 
     // Color points by loss percentage
     const pointColors = lossData.map(loss => {
-      if (loss === 0) return '#28a745';
-      if (loss < 10) return '#ffc107';
-      if (loss < 50) return '#fd7e14';
-      return '#dc3545';
+      if (loss === 0) return '#16a34a';
+      if (loss < 10) return '#eab308';
+      if (loss < 50) return '#f97316';
+      return '#dc2626';
     });
 
     if (chartRef.current) {
       chartRef.current.destroy();
     }
 
+    const xMin = from != null ? from * 1000 : undefined;
+    const xMax = to != null ? to * 1000 : undefined;
+    const rangeSec = from != null && to != null ? to - from : null;
+
+    // Pick a sensible time unit so axis ticks don't crowd
+    let timeUnit: 'minute' | 'hour' | 'day' | undefined;
+    if (rangeSec != null) {
+      if (rangeSec <= 3 * 3600) timeUnit = 'minute';
+      else if (rangeSec <= 3 * 86400) timeUnit = 'hour';
+      else timeUnit = 'day';
+    }
+
     chartRef.current = new Chart(canvasRef.current, {
       type: 'line',
       data: {
-        labels,
         datasets: [
           {
             label: 'Max Latency',
-            data: maxData,
-            borderColor: 'rgba(220, 53, 69, 0.3)',
-            backgroundColor: 'rgba(220, 53, 69, 0.05)',
+            data: maxPoints,
+            borderColor: 'rgba(220, 38, 38, 0.35)',
+            backgroundColor: 'rgba(220, 38, 38, 0.08)',
             fill: '+1',
             pointRadius: 0,
             borderWidth: 1,
-            tension: 0.3,
+            tension: 0.25,
           },
           {
             label: 'Avg Latency',
-            data: avgData,
-            borderColor: '#0d6efd',
+            data: points,
+            borderColor: '#2563eb',
             backgroundColor: 'transparent',
             pointBackgroundColor: pointColors,
-            pointRadius: 2,
-            pointHoverRadius: 5,
+            pointRadius: 2.5,
+            pointHoverRadius: 6,
             borderWidth: 2,
-            tension: 0.3,
+            tension: 0.25,
           },
           {
             label: 'Min Latency',
-            data: minData,
-            borderColor: 'rgba(40, 167, 69, 0.3)',
-            backgroundColor: 'rgba(40, 167, 69, 0.05)',
+            data: minPoints,
+            borderColor: 'rgba(22, 163, 74, 0.35)',
+            backgroundColor: 'rgba(22, 163, 74, 0.08)',
             fill: '-1',
             pointRadius: 0,
             borderWidth: 1,
-            tension: 0.3,
+            tension: 0.25,
           },
         ],
       },
@@ -112,10 +127,18 @@ export default function TimeSeriesGraph({ measurements, title }: Props) {
         scales: {
           x: {
             type: 'time',
+            min: xMin,
+            max: xMax,
             time: {
+              unit: timeUnit,
               tooltipFormat: 'PPpp',
             },
             title: { display: true, text: 'Time' },
+            ticks: {
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 12,
+            },
           },
           y: {
             title: { display: true, text: 'Latency (ms)' },
@@ -134,15 +157,25 @@ export default function TimeSeriesGraph({ measurements, title }: Props) {
       chartRef.current?.destroy();
       chartRef.current = null;
     };
-  }, [measurements, title]);
-
-  if (measurements.length === 0) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>No measurement data available yet.</div>;
-  }
+  }, [measurements, title, from, to]);
 
   return (
     <div style={{ height: 400, position: 'relative' }}>
       <canvas ref={canvasRef} />
+      {measurements.length === 0 && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#94a3b8',
+          fontSize: 13,
+          pointerEvents: 'none',
+        }}>
+          No measurement data in this time range yet.
+        </div>
+      )}
     </div>
   );
 }

@@ -98,12 +98,42 @@ export const api = {
   deleteTarget: (id: string) => request<void>(`/targets/${id}`, { method: 'DELETE' }),
 
   // Measurements
-  getMeasurements: (targetId: string, from?: number, to?: number) => {
+  getMeasurements: (targetId: string, from?: number, to?: number, bucket?: number) => {
     const params = new URLSearchParams();
     if (from) params.set('from', String(from));
     if (to) params.set('to', String(to));
+    if (bucket) params.set('bucket', String(bucket));
     return request<Measurement[]>(`/measurements/${targetId}?${params}`);
   },
+
+  // CSV export URLs (used as href for downloads)
+  exportMeasurementsCsvUrl: (targetId: string, from?: number, to?: number) => {
+    const params = new URLSearchParams();
+    if (from) params.set('from', String(from));
+    if (to) params.set('to', String(to));
+    const q = params.toString();
+    return `${BASE}/measurements/${targetId}/export.csv${q ? '?' + q : ''}`;
+  },
+  exportGroupMeasurementsCsvUrl: (groupId: string, from?: number, to?: number) => {
+    const params = new URLSearchParams();
+    if (from) params.set('from', String(from));
+    if (to) params.set('to', String(to));
+    const q = params.toString();
+    return `${BASE}/groups/${groupId}/measurements/export.csv${q ? '?' + q : ''}`;
+  },
+  exportGroupsCsvUrl: () => `${BASE}/groups/export.csv`,
+  exportTargetsCsvUrl: () => `${BASE}/targets/export.csv`,
+
+  importGroupsCsv: (csv: string) =>
+    request<{ created: number; updated: number; errors: string[] }>(
+      '/groups/import',
+      { method: 'POST', body: csv, headers: { 'Content-Type': 'text/csv' } }
+    ),
+  importTargetsCsv: (csv: string) =>
+    request<{ created: number; updated: number; errors: string[] }>(
+      '/targets/import',
+      { method: 'POST', body: csv, headers: { 'Content-Type': 'text/csv' } }
+    ),
 
   // Peers
   getPeers: () => request<Peer[]>('/peers'),
