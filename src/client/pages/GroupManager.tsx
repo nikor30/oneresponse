@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, type Group } from '../api/client';
+import CsvIO from '../components/CsvIO';
 
 const emptyForm = { name: '', description: '', sla_latency_ms: 100, sla_jitter_ms: 30, sla_loss_pct: 1 };
 
@@ -46,7 +47,15 @@ export default function GroupManager() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, marginBottom: 16 }}>Groups / Regions</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <h1 style={{ fontSize: 22, margin: 0 }}>Groups / Regions</h1>
+        <CsvIO
+          exportUrl={api.exportGroupsCsvUrl()}
+          exportFilename="groups.csv"
+          onImport={api.importGroupsCsv}
+          onImported={load}
+        />
+      </div>
 
       <form onSubmit={handleSubmit} style={{ background: '#fff', padding: 20, borderRadius: 8, marginBottom: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px 100px 100px', gap: 10, alignItems: 'end' }}>
@@ -104,6 +113,13 @@ export default function GroupManager() {
               <td style={{ padding: '10px 16px', textAlign: 'right' }}>{g.sla_jitter_ms} ms</td>
               <td style={{ padding: '10px 16px', textAlign: 'right' }}>{g.sla_loss_pct}%</td>
               <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                <a
+                  href={api.exportGroupMeasurementsCsvUrl(g.id)}
+                  download={`measurements_group_${g.name.replace(/[^a-zA-Z0-9._-]+/g, '_')}.csv`}
+                  style={{ ...btnStyle, background: '#eef2ff', color: '#0f172a', marginRight: 4, fontSize: 12, textDecoration: 'none' } as React.CSSProperties}
+                >
+                  Export data
+                </a>
                 <button onClick={() => handleEdit(g)} style={{ ...btnStyle, background: '#eee', marginRight: 4, fontSize: 12 }}>Edit</button>
                 <button onClick={() => handleDelete(g.id)} style={{ ...btnStyle, background: '#fee', color: '#dc3545', fontSize: 12 }}>Delete</button>
               </td>
