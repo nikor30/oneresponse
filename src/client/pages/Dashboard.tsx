@@ -47,9 +47,26 @@ export default function Dashboard() {
     );
   }
 
+  const totalTargets = data.reduce((n, g) => n + g.targets.length, 0);
+  const breached = data.reduce(
+    (n, g) => n + g.targets.filter(t => (t.sla_score ?? 100) < 70).length,
+    0
+  );
+  const noData = data.reduce(
+    (n, g) => n + g.targets.filter(t => t.sla_score == null).length,
+    0
+  );
+
   return (
     <div>
-      <h1 style={{ fontSize: 24, marginBottom: 16 }}>Real-Time SLA View</h1>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <h1 style={{ fontSize: 26, margin: 0, fontWeight: 700, letterSpacing: -0.3 }}>Real-Time SLA View</h1>
+        <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#475569' }}>
+          <span><strong style={{ color: '#0f172a' }}>{totalTargets}</strong> targets</span>
+          <span><strong style={{ color: breached > 0 ? '#dc2626' : '#16a34a' }}>{breached}</strong> breached</span>
+          {noData > 0 && <span><strong style={{ color: '#6b7280' }}>{noData}</strong> awaiting data</span>}
+        </div>
+      </div>
       <GroupSelector
         groups={data.map(d => ({ id: d.group.id, name: d.group.name }))}
         selected={selectedGroup}
