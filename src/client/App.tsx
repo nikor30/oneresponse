@@ -6,19 +6,22 @@ import TargetDetail from './pages/TargetDetail';
 import TargetManager from './pages/TargetManager';
 import GroupManager from './pages/GroupManager';
 import PeerManager from './pages/PeerManager';
+import { ThemeProvider } from './theme/ThemeContext';
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/targets" element={<TargetManager />} />
-          <Route path="/targets/:id" element={<TargetDetail />} />
-          <Route path="/groups" element={<GroupManager />} />
-          <Route path="/peers" element={<PeerManager />} />
-        </Routes>
-      </Layout>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/targets" element={<TargetManager />} />
+            <Route path="/targets/:id" element={<TargetDetail />} />
+            <Route path="/groups" element={<GroupManager />} />
+            <Route path="/peers" element={<PeerManager />} />
+          </Routes>
+        </Layout>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
