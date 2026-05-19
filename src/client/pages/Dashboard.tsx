@@ -1,18 +1,23 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { api, type DashboardNode } from '../api/client';
 import DartChart from '../components/DartChart';
 import GroupSelector from '../components/GroupSelector';
+import TargetDetailModal from '../components/TargetDetailModal';
 
 export default function Dashboard() {
   const [nodes, setNodes] = useState<DashboardNode[]>([]);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const [showLabels, setShowLabels] = useState(true);
+  const [openTargetId, setOpenTargetId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const data = await api.getDashboardAggregate();
+      const [data, settings] = await Promise.all([
+        api.getDashboardAggregate(),
+        api.getSettings().catch(() => ({} as Record<string, string | null>)),
+      ]);
       setNodes(data);
+      setShowLabels(settings.show_target_labels !== 'false');
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -26,10 +31,15 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Refresh when site name changes from the settings drawer so the local
-  // pane's heading updates without waiting for the next poll
+  // Settings drawer dispatches this when site_name or show_target_labels changes
   useEffect(() => {
-    const onSettings = () => loadData();
+    const onSettings = (e: Event) => {
+      const detail = (e as CustomEvent<Record<string, string | null>>).detail;
+      if (detail && 'show_target_labels' in detail) {
+        setShowLabels(detail.show_target_labels !== 'false');
+      }
+      loadData();
+    };
     window.addEventListener('oneresponse:settings-changed', onSettings);
     return () => window.removeEventListener('oneresponse:settings-changed', onSettings);
   }, [loadData]);
@@ -51,40 +61,47 @@ export default function Dashboard() {
   }
 
   return (
-    <div style={{
-      display: 'grid',
-      gap: 24,
-      gridTemplateColumns: nodes.length > 1
-        ? 'repeat(auto-fit, minmax(640px, 1fr))'
-        : 'minmax(0, 820px)',
-      justifyContent: 'center',
-      justifyItems: 'center',
-    }}>
-      {nodes.map(node => (
-        <NodePane
-          key={node.peer_id ?? 'local'}
-          node={node}
-          onTargetClick={(targetId) => {
-            if (node.peer_id == null) {
-              // Local target — open the detail view in-app
-              navigate(`/targets/${targetId}`);
-            } else if (node.url) {
-              // Remote target — open the peer's UI in a new tab
-              window.open(`${node.url.replace(/\/$/, '')}/targets/${targetId}`, '_blank', 'noopener,noreferrer');
-            }
-          }}
-        />
-      ))}
-    </div>
+    <>
+      <div style={{
+        display: 'grid',
+        gap: 24,
+        gridTemplateColumns: nodes.length > 1
+          ? 'repeat(auto-fit, minmax(640px, 1fr))'
+          : 'minmax(0, 820px)',
+        justifyContent: 'center',
+        justifyItems: 'center',
+      }}>
+        {nodes.map(node => (
+          <NodePane
+            key={node.peer_id ?? 'local'}
+            node={node}
+            showLabels={showLabels}
+            onTargetClick={(targetId) => {
+              if (node.peer_id == null) {
+                setOpenTargetId(targetId);
+              } else if (node.url) {
+                window.open(`${node.url.replace(/\/$/, '')}/targets/${targetId}`, '_blank', 'noopener,noreferrer');
+              }
+            }}
+          />
+        ))}
+      </div>
+      <TargetDetailModal
+        targetId={openTargetId}
+        onClose={() => setOpenTargetId(null)}
+      />
+    </>
   );
 }
 
 function NodePane({
   node,
   onTargetClick,
+  showLabels,
 }: {
   node: DashboardNode;
   onTargetClick: (targetId: string) => void;
+  showLabels: boolean;
 }) {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const isRemote = node.peer_id != null;
@@ -174,7 +191,12 @@ function NodePane({
               {noData > 0 && <span><strong style={{ color: 'var(--text-dim)' }}>{noData}</strong> awaiting data</span>}
             </div>
           </div>
-          <DartChart data={data} onTargetClick={onTargetClick} selectedGroup={selectedGroup} />
+          <DartChart
+            data={data}
+            onTargetClick={onTargetClick}
+            selectedGroup={selectedGroup}
+            showLabels={showLabels}
+          />
         </>
       )}
     </div>

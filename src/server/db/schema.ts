@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS groups (
   sla_latency_ms REAL DEFAULT 100,
   sla_jitter_ms REAL DEFAULT 30,
   sla_loss_pct REAL DEFAULT 1,
+  viz_latency_min REAL,
+  viz_latency_max REAL,
   created_at INTEGER DEFAULT (unixepoch())
 );
 

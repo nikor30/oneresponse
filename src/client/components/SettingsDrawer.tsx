@@ -24,6 +24,7 @@ export default function SettingsDrawer({ open, onClose }: Props) {
   const [siteName, setSiteName] = useState<string>('');
   const [siteNameSaved, setSiteNameSaved] = useState<string>('');
   const [siteSaving, setSiteSaving] = useState(false);
+  const [showLabels, setShowLabels] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -33,6 +34,7 @@ export default function SettingsDrawer({ open, onClose }: Props) {
         const v = s.site_name || 'oneresponse';
         setSiteName(v);
         setSiteNameSaved(v);
+        setShowLabels(s.show_target_labels !== 'false');
       })
       .catch(() => { /* ignore */ });
   }, [open]);
@@ -53,6 +55,19 @@ export default function SettingsDrawer({ open, onClose }: Props) {
     }
   };
 
+  const toggleShowLabels = async () => {
+    const next = !showLabels;
+    setShowLabels(next);
+    try {
+      const updated = await api.updateSettings({ show_target_labels: next ? 'true' : 'false' });
+      window.dispatchEvent(new CustomEvent('oneresponse:settings-changed', { detail: updated }));
+    } catch (e) {
+      setErr((e as Error).message);
+      // Roll back optimistic state
+      setShowLabels(!next);
+    }
+  };
+
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -65,17 +80,19 @@ export default function SettingsDrawer({ open, onClose }: Props) {
     setEdits(prev => ({ ...prev, [gid]: { ...prev[gid], ...patch } }));
   };
 
-  const valueFor = (g: Group, key: keyof Group): number => {
+  // Number value with fallback. Treats undefined/null as "use group's
+  // current value" so the user can clear an override by typing empty.
+  const valueFor = (g: Group, key: keyof Group): number | null => {
     const edit = edits[g.id];
-    if (edit && edit[key] != null) return edit[key] as number;
-    return g[key] as number;
+    if (edit && key in edit) return (edit[key] as number | null) ?? null;
+    return (g[key] as number | null) ?? null;
   };
 
   const isDirty = (g: Group): boolean => {
     const edit = edits[g.id];
     if (!edit) return false;
-    return (['sla_latency_ms', 'sla_jitter_ms', 'sla_loss_pct'] as const).some(
-      k => edit[k] != null && edit[k] !== g[k]
+    return (['sla_latency_ms', 'sla_jitter_ms', 'sla_loss_pct', 'viz_latency_min', 'viz_latency_max'] as const).some(
+      k => k in edit && edit[k] !== g[k]
     );
   };
 
@@ -191,8 +208,16 @@ export default function SettingsDrawer({ open, onClose }: Props) {
             <ThemeChip active={theme === 'dark'}  onClick={() => setTheme('dark')}>🌙 Dark</ThemeChip>
           </div>
 
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 13, color: 'var(--text)' }}>Show target labels</div>
+              <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Floating name + ms pills next to each dot</div>
+            </div>
+            <Toggle checked={showLabels} onChange={toggleShowLabels} />
+          </div>
+
           <SectionTitle style={{ marginTop: 20 }}>
-            SLA thresholds
+            Per-group thresholds & chart range
             <Link to="/groups" onClick={onClose} style={{ float: 'right', fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}>
               Manage all →
             </Link>
@@ -232,6 +257,34 @@ export default function SettingsDrawer({ open, onClose }: Props) {
                   onChange={v => updateEdit(g.id, { sla_loss_pct: v })}
                 />
               </Field>
+
+              <div style={{
+                marginTop: 8, paddingTop: 6,
+                borderTop: `1px dashed ${border}`,
+                fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700,
+              }}>
+                Chart range (visualization only)
+              </div>
+              <Field label="Center value (ms)">
+                <NumInput
+                  value={valueFor(g, 'viz_latency_min')}
+                  placeholder="0"
+                  allowClear
+                  onChange={v => updateEdit(g.id, { viz_latency_min: v })}
+                />
+              </Field>
+              <Field label="Edge value (ms)">
+                <NumInput
+                  value={valueFor(g, 'viz_latency_max')}
+                  placeholder={`${(g.sla_latency_ms ?? 100) * 3}`}
+                  allowClear
+                  onChange={v => updateEdit(g.id, { viz_latency_max: v })}
+                />
+              </Field>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+                Empty = default (0 → 3× SLA latency)
+              </div>
+
               {isDirty(g) && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                   <button
@@ -346,14 +399,31 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function NumInput({
-  value, onChange, step,
-}: { value: number; onChange: (v: number) => void; step?: number }) {
+  value, onChange, step, placeholder, allowClear,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+  step?: number;
+  placeholder?: string;
+  // When true, empty string emits null (clearing the override).
+  // When false, empty becomes 0.
+  allowClear?: boolean;
+}) {
   return (
     <input
       type="number"
       step={step}
-      value={Number.isFinite(value) ? value : 0}
-      onChange={e => onChange(parseFloat(e.target.value) || 0)}
+      placeholder={placeholder}
+      value={value == null || !Number.isFinite(value) ? '' : value}
+      onChange={e => {
+        const raw = e.target.value;
+        if (raw === '') {
+          onChange(allowClear ? null : 0);
+        } else {
+          const parsed = parseFloat(raw);
+          onChange(Number.isFinite(parsed) ? parsed : (allowClear ? null : 0));
+        }
+      }}
       style={{
         width: 80,
         padding: '4px 8px',
@@ -365,5 +435,38 @@ function NumInput({
         textAlign: 'right',
       }}
     />
+  );
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      style={{
+        width: 38,
+        height: 22,
+        borderRadius: 999,
+        border: 0,
+        padding: 2,
+        background: checked ? 'var(--accent)' : 'var(--border)',
+        cursor: 'pointer',
+        position: 'relative',
+        transition: 'background 0.15s ease',
+        flexShrink: 0,
+      }}
+    >
+      <span style={{
+        display: 'block',
+        width: 18,
+        height: 18,
+        borderRadius: '50%',
+        background: '#fff',
+        transform: `translateX(${checked ? 16 : 0}px)`,
+        transition: 'transform 0.15s ease',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+      }} />
+    </button>
   );
 }
