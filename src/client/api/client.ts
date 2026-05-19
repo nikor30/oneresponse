@@ -21,6 +21,10 @@ export interface Group {
   sla_latency_ms: number;
   sla_jitter_ms: number;
   sla_loss_pct: number;
+  // Per-group visualization range. When null, the dart chart maps
+  // 0 → center and 3 × sla_latency_ms → edge (current default).
+  viz_latency_min: number | null;
+  viz_latency_max: number | null;
   created_at: number;
 }
 
@@ -73,7 +77,15 @@ export interface DashboardTarget {
 }
 
 export interface DashboardGroup {
-  group: { id: string; name: string; sla_latency_ms: number; sla_jitter_ms: number; sla_loss_pct: number };
+  group: {
+    id: string;
+    name: string;
+    sla_latency_ms: number;
+    sla_jitter_ms: number;
+    sla_loss_pct: number;
+    viz_latency_min: number | null;
+    viz_latency_max: number | null;
+  };
   targets: DashboardTarget[];
 }
 

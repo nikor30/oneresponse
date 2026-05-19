@@ -7,6 +7,7 @@ interface Props {
   data: DashboardGroup[];
   onTargetClick: (targetId: string) => void;
   selectedGroup: string | null;
+  showLabels?: boolean;
 }
 
 interface TooltipData {
@@ -16,18 +17,37 @@ interface TooltipData {
   y: number;
 }
 
-// Latency → normalised radius (0 = center, 1 = edge).
-// SLA threshold sits on the 0.7 ring, 3× threshold sits on the outer edge.
-function latencyToRadius(latency: number, threshold: number): number {
-  if (latency <= 0) return 0;
-  if (latency <= threshold) {
-    return 0.7 * (latency / threshold);
-  }
-  const over = Math.min(1, (latency - threshold) / (threshold * 2));
-  return 0.7 + 0.3 * over;
+interface VizRange {
+  min: number;       // latency that maps to chart center
+  threshold: number; // latency that maps to SLA ring (0.7 radius)
+  max: number;       // latency that maps to chart edge
 }
 
-export default function DartChart({ data, onTargetClick, selectedGroup }: Props) {
+// Resolve per-group viz min/max with sensible fallbacks.
+function vizRangeFor(g: { sla_latency_ms: number; viz_latency_min: number | null; viz_latency_max: number | null }): VizRange {
+  const threshold = g.sla_latency_ms;
+  const min = g.viz_latency_min != null ? g.viz_latency_min : 0;
+  const max = g.viz_latency_max != null ? g.viz_latency_max : threshold * 3;
+  return { min, threshold, max };
+}
+
+// Latency → normalised radius (0 = center, 1 = edge).
+// SLA threshold always sits on the 0.7 ring. viz min sits at center,
+// viz max sits at the edge.
+function latencyToRadius(latency: number, r: VizRange): number {
+  if (latency <= r.min) return 0;
+  if (latency >= r.max) return 1;
+  if (latency <= r.threshold) {
+    const span = r.threshold - r.min;
+    if (span <= 0) return 0.7;
+    return 0.7 * ((latency - r.min) / span);
+  }
+  const span = r.max - r.threshold;
+  if (span <= 0) return 0.7;
+  return 0.7 + 0.3 * ((latency - r.threshold) / span);
+}
+
+export default function DartChart({ data, onTargetClick, selectedGroup, showLabels = true }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
@@ -264,14 +284,15 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
         .text(groupData.group.name);
 
       // Small ms-tick labels along an off-axis line so they don't overlap
-      // target dots in the segment
+      // target dots in the segment. Ticks span the group's viz range:
+      // center = vizMin, 0.7 = SLA threshold, edge = vizMax.
       const tickAngle = startAngle + anglePerGroup * 0.18;
-      const threshold = groupData.group.sla_latency_ms;
+      const vr = vizRangeFor(groupData.group);
       const ticks: { frac: number; ms: number; bold?: boolean }[] = [
-        { frac: 0.35, ms: threshold * 0.5 },
-        { frac: 0.7, ms: threshold, bold: true },
-        { frac: 0.85, ms: threshold * 2 },
-        { frac: 1.0, ms: threshold * 3 },
+        { frac: 0.35, ms: vr.min + (vr.threshold - vr.min) * 0.5 },
+        { frac: 0.7,  ms: vr.threshold, bold: true },
+        { frac: 0.85, ms: vr.threshold + (vr.max - vr.threshold) * 0.5 },
+        { frac: 1.0,  ms: vr.max },
       ];
       const tcos = Math.cos(tickAngle), tsin = Math.sin(tickAngle);
       const perpX = Math.cos(tickAngle + Math.PI / 2), perpY = Math.sin(tickAngle + Math.PI / 2);
@@ -320,7 +341,7 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
     // -----------------------------------------------------------------
     filteredData.forEach((groupData, groupIdx) => {
       const startAngle = groupIdx * anglePerGroup - Math.PI / 2;
-      const threshold = groupData.group.sla_latency_ms;
+      const vrTargets = vizRangeFor(groupData.group);
 
       const targets = groupData.targets;
       const targetAngleStep = anglePerGroup / (targets.length + 1);
@@ -347,13 +368,12 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
         const dotStroke = '#ffffff';
 
         // Permanent drift line: lifetime min → lifetime max.
-        // Falls back to current min/max when lifetime data isn't available
-        // (e.g. before the dashboard query has been deployed).
+        // Falls back to current min/max when lifetime data isn't available.
         const driftMin = target.latency_min_lifetime ?? target.latency_min ?? target.latency_avg;
         const driftMax = target.latency_max_lifetime ?? target.latency_max ?? target.latency_avg;
         if (driftMin != null && driftMax != null && driftMin !== driftMax) {
-          const rMin = radius * latencyToRadius(driftMin, threshold);
-          const rMax = radius * latencyToRadius(driftMax, threshold);
+          const rMin = radius * latencyToRadius(driftMin, vrTargets);
+          const rMax = radius * latencyToRadius(driftMax, vrTargets);
 
           // White outline so the drift line stays legible across the
           // green ↔ red boundary
@@ -387,7 +407,7 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
         }
 
         // Current-value dot
-        const currentR = radius * latencyToRadius(target.latency_avg, threshold);
+        const currentR = radius * latencyToRadius(target.latency_avg, vrTargets);
         const dotX = cos * currentR;
         const dotY = sin * currentR;
 
@@ -425,48 +445,55 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
         dot.on('mouseover', (event: MouseEvent) => { dot.attr('r', 8); showTip(event); });
         dot.on('mouseout', () => { dot.attr('r', 6.5); hideTip(); });
 
-        // Floating label pill — primary click target (bigger than the dot)
-        const labelDist = 14;
-        const anchor = cos > 0.15 ? 'start' : cos < -0.15 ? 'end' : 'middle';
-        const lg = dotGroup.append('g')
-          .attr('transform', `translate(${dotX + cos * labelDist},${dotY + sin * labelDist})`)
-          .style('cursor', 'pointer')
-          .attr('filter', 'url(#label-shadow)');
-        const labelText = `${target.name} · ${formatMs(target.latency_avg)}`;
-        const padX = 6, padY = 3, fontPx = 11;
-        const approxW = labelText.length * fontPx * 0.58;
-        const rectX = anchor === 'start' ? -padX
-                    : anchor === 'end'   ? -approxW - padX
-                                          : -approxW / 2 - padX;
-        const labelRect = lg.append('rect')
-          .attr('x', rectX)
-          .attr('y', -fontPx / 2 - padY)
-          .attr('width', approxW + padX * 2)
-          .attr('height', fontPx + padY * 2)
-          .attr('rx', 4)
-          .attr('fill', 'rgba(255,255,255,0.85)')
-          .attr('stroke', dotFill)
-          .attr('stroke-width', 0.8)
-          .attr('stroke-opacity', 0.6);
-        lg.append('text')
-          .attr('text-anchor', anchor)
-          .attr('dominant-baseline', 'middle')
-          .attr('font-size', fontPx)
-          .attr('font-weight', 600)
-          .attr('fill', '#0f172a')
-          .text(labelText);
+        if (showLabels) {
+          // Floating label pill — primary click target (bigger than the dot)
+          const labelDist = 14;
+          const anchor = cos > 0.15 ? 'start' : cos < -0.15 ? 'end' : 'middle';
+          const lg = dotGroup.append('g')
+            .attr('transform', `translate(${dotX + cos * labelDist},${dotY + sin * labelDist})`)
+            .style('cursor', 'pointer')
+            .attr('filter', 'url(#label-shadow)');
+          const labelText = `${target.name} · ${formatMs(target.latency_avg)}`;
+          const padX = 6, padY = 3, fontPx = 11;
+          const approxW = labelText.length * fontPx * 0.58;
+          const rectX = anchor === 'start' ? -padX
+                      : anchor === 'end'   ? -approxW - padX
+                                            : -approxW / 2 - padX;
+          const labelRect = lg.append('rect')
+            .attr('x', rectX)
+            .attr('y', -fontPx / 2 - padY)
+            .attr('width', approxW + padX * 2)
+            .attr('height', fontPx + padY * 2)
+            .attr('rx', 4)
+            .attr('fill', 'rgba(255,255,255,0.85)')
+            .attr('stroke', dotFill)
+            .attr('stroke-width', 0.8)
+            .attr('stroke-opacity', 0.6);
+          lg.append('text')
+            .attr('text-anchor', anchor)
+            .attr('dominant-baseline', 'middle')
+            .attr('font-size', fontPx)
+            .attr('font-weight', 600)
+            .attr('fill', '#0f172a')
+            .text(labelText);
 
-        lg.on('mouseover', (event: MouseEvent) => {
-          labelRect.attr('fill', 'rgba(255,255,255,0.98)').attr('stroke-width', 1.6).attr('stroke-opacity', 1);
-          dot.attr('r', 8);
-          showTip(event);
-        });
-        lg.on('mouseout', () => {
-          labelRect.attr('fill', 'rgba(255,255,255,0.85)').attr('stroke-width', 0.8).attr('stroke-opacity', 0.6);
-          dot.attr('r', 6.5);
-          hideTip();
-        });
-        lg.on('click', () => onTargetClick(target.id));
+          lg.on('mouseover', (event: MouseEvent) => {
+            labelRect.attr('fill', 'rgba(255,255,255,0.98)').attr('stroke-width', 1.6).attr('stroke-opacity', 1);
+            dot.attr('r', 8);
+            showTip(event);
+          });
+          lg.on('mouseout', () => {
+            labelRect.attr('fill', 'rgba(255,255,255,0.85)').attr('stroke-width', 0.8).attr('stroke-opacity', 0.6);
+            dot.attr('r', 6.5);
+            hideTip();
+          });
+          lg.on('click', () => onTargetClick(target.id));
+        } else {
+          // Labels hidden — fall back to dot as click target so the user
+          // can still drill in.
+          dot.style('cursor', 'pointer');
+          dot.on('click', () => onTargetClick(target.id));
+        }
       });
     });
 

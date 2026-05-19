@@ -20,6 +20,8 @@ interface DashboardRow {
   sla_latency_ms: number;
   sla_jitter_ms: number;
   sla_loss_pct: number;
+  viz_latency_min: number | null;
+  viz_latency_max: number | null;
   target_id: string;
   target_name: string;
   host: string;
@@ -69,6 +71,7 @@ function computeLocalDashboard(): Array<{ group: Record<string, unknown>; target
     SELECT
       g.id as group_id, g.name as group_name,
       g.sla_latency_ms, g.sla_jitter_ms, g.sla_loss_pct,
+      g.viz_latency_min, g.viz_latency_max,
       t.id as target_id, t.name as target_name, t.host, t.site_code,
       m.timestamp, m.latency_min, m.latency_avg, m.latency_max,
       m.jitter, m.loss_pct, m.sla_score,
@@ -95,6 +98,8 @@ function computeLocalDashboard(): Array<{ group: Record<string, unknown>; target
           sla_latency_ms: row.sla_latency_ms,
           sla_jitter_ms: row.sla_jitter_ms,
           sla_loss_pct: row.sla_loss_pct,
+          viz_latency_min: row.viz_latency_min,
+          viz_latency_max: row.viz_latency_max,
         },
         targets: [],
       });

@@ -165,14 +165,18 @@ router.get('/:id', (req: Request, res: Response) => {
 
 router.post('/', (req: Request, res: Response) => {
   const db = getDb();
-  const { name, description, sla_latency_ms, sla_jitter_ms, sla_loss_pct } = req.body;
+  const { name, description, sla_latency_ms, sla_jitter_ms, sla_loss_pct, viz_latency_min, viz_latency_max } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const id = uuidv4();
   db.prepare(`
-    INSERT INTO groups (id, name, description, sla_latency_ms, sla_jitter_ms, sla_loss_pct)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, name, description || null, sla_latency_ms ?? 100, sla_jitter_ms ?? 30, sla_loss_pct ?? 1);
+    INSERT INTO groups (id, name, description, sla_latency_ms, sla_jitter_ms, sla_loss_pct, viz_latency_min, viz_latency_max)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, name, description || null,
+    sla_latency_ms ?? 100, sla_jitter_ms ?? 30, sla_loss_pct ?? 1,
+    viz_latency_min ?? null, viz_latency_max ?? null,
+  );
 
   const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(id);
   res.status(201).json(group);
@@ -183,17 +187,25 @@ router.put('/:id', (req: Request, res: Response) => {
   const existing = db.prepare('SELECT * FROM groups WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Group not found' });
 
-  const { name, description, sla_latency_ms, sla_jitter_ms, sla_loss_pct } = req.body;
+  // Treat explicit `null` as "clear this override"; treat missing key as "keep current".
+  const body = req.body as Record<string, unknown>;
+  const pick = <K extends keyof Record<string, unknown>>(key: K): unknown =>
+    key in body ? body[key as string] : (existing as Record<string, unknown>)[key as string];
+
   db.prepare(`
-    UPDATE groups SET name = ?, description = ?, sla_latency_ms = ?, sla_jitter_ms = ?, sla_loss_pct = ?
+    UPDATE groups
+    SET name = ?, description = ?, sla_latency_ms = ?, sla_jitter_ms = ?, sla_loss_pct = ?,
+        viz_latency_min = ?, viz_latency_max = ?
     WHERE id = ?
   `).run(
-    name ?? (existing as Record<string, unknown>).name,
-    description ?? (existing as Record<string, unknown>).description,
-    sla_latency_ms ?? (existing as Record<string, unknown>).sla_latency_ms,
-    sla_jitter_ms ?? (existing as Record<string, unknown>).sla_jitter_ms,
-    sla_loss_pct ?? (existing as Record<string, unknown>).sla_loss_pct,
-    req.params.id
+    pick('name'),
+    pick('description'),
+    pick('sla_latency_ms'),
+    pick('sla_jitter_ms'),
+    pick('sla_loss_pct'),
+    pick('viz_latency_min'),
+    pick('viz_latency_max'),
+    req.params.id,
   );
 
   const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(req.params.id);

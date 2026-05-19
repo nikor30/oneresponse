@@ -35,7 +35,7 @@ export default function TargetDetail() {
   const { id } = useParams<{ id: string }>();
   const [target, setTarget] = useState<Target | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
-  const [range, setRange] = useState(86400);
+  const [range, setRange] = useState(21600); // 6h default
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [loading, setLoading] = useState(true);
 
