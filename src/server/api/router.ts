@@ -6,6 +6,7 @@ import groupsRouter from './groups.js';
 import targetsRouter from './targets.js';
 import measurementsRouter from './measurements.js';
 import peersRouter from './peers.js';
+import { getStorageStats } from '../maintenance.js';
 
 const router = Router();
 
@@ -40,34 +41,13 @@ interface DashboardRow {
 
 // Reusable: compute the local dashboard payload (groups+targets+latest+lifetime).
 // Used both by GET /dashboard and by GET /peer-view (which peers fetch).
+//
+// Lifetime drift comes from the target_stats table (refreshed by the
+// background maintenance job every 10 min) — much cheaper than re-running
+// NTILE(20) over the whole measurements table on every dashboard render.
 function computeLocalDashboard(): Array<{ group: Record<string, unknown>; targets: Record<string, unknown>[] }> {
   const db = getDb();
   const rows = db.prepare(`
-    WITH ranked AS (
-      SELECT
-        target_id,
-        latency_avg,
-        NTILE(20) OVER (PARTITION BY target_id ORDER BY latency_avg ASC) AS tile
-      FROM measurements
-      WHERE peer_id IS NULL
-        AND loss_pct < 100
-        AND latency_avg > 0
-    ),
-    lifetime AS (
-      SELECT
-        target_id,
-        CASE WHEN COUNT(*) >= 20
-          THEN MAX(CASE WHEN tile = 1 THEN latency_avg END)
-          ELSE MIN(latency_avg)
-        END AS latency_min_lifetime,
-        CASE WHEN COUNT(*) >= 20
-          THEN MIN(CASE WHEN tile = 20 THEN latency_avg END)
-          ELSE MAX(latency_avg)
-        END AS latency_max_lifetime,
-        COUNT(*) AS sample_count
-      FROM ranked
-      GROUP BY target_id
-    )
     SELECT
       g.id as group_id, g.name as group_name,
       g.sla_latency_ms, g.sla_jitter_ms, g.sla_loss_pct,
@@ -75,7 +55,7 @@ function computeLocalDashboard(): Array<{ group: Record<string, unknown>; target
       t.id as target_id, t.name as target_name, t.host, t.site_code,
       m.timestamp, m.latency_min, m.latency_avg, m.latency_max,
       m.jitter, m.loss_pct, m.sla_score,
-      lt.latency_min_lifetime, lt.latency_max_lifetime, lt.sample_count
+      ts.latency_min_lifetime, ts.latency_max_lifetime, ts.sample_count
     FROM targets t
     JOIN groups g ON t.group_id = g.id
     LEFT JOIN measurements m ON m.id = (
@@ -83,7 +63,7 @@ function computeLocalDashboard(): Array<{ group: Record<string, unknown>; target
       WHERE target_id = t.id AND peer_id IS NULL
       ORDER BY timestamp DESC LIMIT 1
     )
-    LEFT JOIN lifetime lt ON lt.target_id = t.id
+    LEFT JOIN target_stats ts ON ts.target_id = t.id
     WHERE t.enabled = 1
     ORDER BY g.name, t.name
   `).all() as DashboardRow[];
@@ -216,9 +196,11 @@ router.get('/dashboard/aggregate', async (_req: Request, res: Response) => {
   res.json([localEntry, ...peerEntries]);
 });
 
-// API key management
+// API key management. We always create keys with 'admin' permissions
+// (read + write) since the UI no longer asks the operator to pick — the
+// distinction was confusing for the common case of pairing two nodes.
 router.post('/api-keys', (req: Request, res: Response) => {
-  const { name, permissions } = req.body;
+  const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const rawKey = uuidv4() + '-' + uuidv4();
@@ -227,11 +209,11 @@ router.post('/api-keys', (req: Request, res: Response) => {
 
   const db = getDb();
   db.prepare('INSERT INTO api_keys (id, name, key_hash, permissions) VALUES (?, ?, ?, ?)').run(
-    id, name, keyHash, permissions || 'read'
+    id, name, keyHash, 'admin'
   );
 
   // Return the raw key only once
-  res.status(201).json({ id, name, key: rawKey, permissions: permissions || 'read' });
+  res.status(201).json({ id, name, key: rawKey, permissions: 'admin' });
 });
 
 router.get('/api-keys', (_req: Request, res: Response) => {
@@ -282,6 +264,12 @@ router.put('/settings', (req: Request, res: Response) => {
   const out: Record<string, string | null> = {};
   for (const r of rows) out[r.key] = r.value;
   res.json(out);
+});
+
+// Storage stats — row counts and oldest measurement, so the operator
+// can see how the database is growing under their probe load.
+router.get('/storage-stats', (_req: Request, res: Response) => {
+  res.json(getStorageStats());
 });
 
 // Health check

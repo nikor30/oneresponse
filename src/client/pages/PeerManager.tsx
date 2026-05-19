@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, type Peer, type ApiKey, type ApiKeyWithSecret } from '../api/client';
 
-const emptyForm = { name: '', url: '', api_key: '', direction: 'both' };
+const emptyForm = { name: '', url: '', api_key: '' };
 
 export default function PeerManager() {
   const [peers, setPeers] = useState<Peer[]>([]);
@@ -11,7 +11,6 @@ export default function PeerManager() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [newKey, setNewKey] = useState<ApiKeyWithSecret | null>(null);
   const [newKeyName, setNewKeyName] = useState('');
-  const [newKeyPerm, setNewKeyPerm] = useState<'read' | 'write'>('read');
   const [keyErr, setKeyErr] = useState('');
 
   const loadPeers = () => api.getPeers().then(setPeers).catch(e => setError(e.message));
@@ -26,7 +25,7 @@ export default function PeerManager() {
       if (editingId) {
         await api.updatePeer(editingId, form);
       } else {
-        await api.createPeer(form);
+        await api.createPeer({ ...form, direction: 'both' });
       }
       setForm(emptyForm);
       setEditingId(null);
@@ -38,7 +37,7 @@ export default function PeerManager() {
 
   const handleEdit = (p: Peer) => {
     setEditingId(p.id);
-    setForm({ name: p.name, url: p.url, api_key: '', direction: p.direction });
+    setForm({ name: p.name, url: p.url, api_key: '' });
   };
 
   const handleDelete = async (id: string) => {
@@ -52,7 +51,7 @@ export default function PeerManager() {
     setKeyErr('');
     if (!newKeyName.trim()) { setKeyErr('Name is required'); return; }
     try {
-      const created = await api.createApiKey(newKeyName.trim(), newKeyPerm);
+      const created = await api.createApiKey(newKeyName.trim());
       setNewKey(created);
       setNewKeyName('');
       loadKeys();
@@ -87,6 +86,7 @@ export default function PeerManager() {
     borderRadius: 8,
     marginBottom: 24,
     boxShadow: 'var(--shadow)',
+    border: '1px solid var(--border)',
   };
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'http://this-node:3000';
@@ -95,7 +95,7 @@ export default function PeerManager() {
     <div>
       <h1 style={{ fontSize: 22, marginBottom: 16, color: 'var(--text)' }}>Peers</h1>
       <p style={{ color: 'var(--text-muted)', marginBottom: 16, fontSize: 13 }}>
-        Connect to other oneresponse instances to measure from multiple locations.
+        Connect to other oneresponse instances to see them as additional panes on the dashboard.
       </p>
 
       {/* ------------- HOW TO ------------- */}
@@ -122,20 +122,16 @@ export default function PeerManager() {
             <li>
               <strong>Create an API key on the <em>remote</em> node</strong> &mdash; open its
               {' '}<code style={inlineCode}>/peers</code> page and use the <em>API keys</em> section
-              below to create a key. Copy the raw key value (shown only once).
+              below to create one. Copy the raw key value (shown only once).
             </li>
             <li>
-              <strong>Add the peer here</strong> &mdash; fill in the form below with the remote URL and the API key you just created on the other side.
-              Pick a direction:
-              <ul style={{ paddingLeft: 18, margin: 4 }}>
-                <li><strong>both</strong> &mdash; we push our measurements there and pull theirs back</li>
-                <li><strong>push</strong> &mdash; we send measurements to them only</li>
-                <li><strong>pull</strong> &mdash; we fetch measurements from them only</li>
-              </ul>
+              <strong>Add the peer here</strong> &mdash; fill in the form below with the remote URL
+              and the API key you just created on the other side.
             </li>
             <li>
               <strong>Repeat on the remote node</strong> &mdash; create an API key on <em>this</em> node and add this one as a peer there too.
               This node's URL is <code style={inlineCode}>{origin}</code>.
+              Once both sides are paired, every dashboard, modal and ranking shows both nodes.
             </li>
           </ol>
           <p style={{ marginTop: 8, fontSize: 12, color: 'var(--text-dim)' }}>
@@ -150,7 +146,7 @@ export default function PeerManager() {
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
           {editingId ? 'Edit peer' : 'Add a peer'}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 120px', gap: 10, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, alignItems: 'end' }}>
           <div>
             <label style={fieldLabel}>Name</label>
             <input style={{ ...inputStyle, width: '100%' }} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required placeholder="Remote Probe 1" />
@@ -162,14 +158,6 @@ export default function PeerManager() {
           <div>
             <label style={fieldLabel}>API key (from the remote node)</label>
             <input type="password" style={{ ...inputStyle, width: '100%' }} value={form.api_key} onChange={e => setForm({ ...form, api_key: e.target.value })} required={!editingId} placeholder="paste here" />
-          </div>
-          <div>
-            <label style={fieldLabel}>Direction</label>
-            <select style={{ ...inputStyle, width: '100%' }} value={form.direction} onChange={e => setForm({ ...form, direction: e.target.value })}>
-              <option value="both">Both</option>
-              <option value="push">Push</option>
-              <option value="pull">Pull</option>
-            </select>
           </div>
         </div>
         <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
@@ -185,12 +173,11 @@ export default function PeerManager() {
 
       {/* ------------- PEERS TABLE ------------- */}
       <h2 style={{ fontSize: 16, marginBottom: 10, color: 'var(--text)' }}>Configured peers</h2>
-      <table style={{ width: '100%', background: 'var(--bg-card)', color: 'var(--text)', borderRadius: 8, boxShadow: 'var(--shadow)', borderCollapse: 'collapse', marginBottom: 24 }}>
+      <table style={{ width: '100%', background: 'var(--bg-card)', color: 'var(--text)', borderRadius: 8, boxShadow: 'var(--shadow)', border: '1px solid var(--border)', borderCollapse: 'collapse', marginBottom: 24 }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--border)' }}>
             <th style={th}>Name</th>
             <th style={th}>URL</th>
-            <th style={{ ...th, textAlign: 'center' }}>Direction</th>
             <th style={{ ...th, textAlign: 'center' }}>Enabled</th>
             <th style={th}>Last Seen</th>
             <th style={{ ...th, textAlign: 'right' }}>Actions</th>
@@ -201,7 +188,6 @@ export default function PeerManager() {
             <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
               <td style={{ ...td, fontWeight: 600 }}>{p.name}</td>
               <td style={{ ...td, fontFamily: 'monospace', fontSize: 12 }}>{p.url}</td>
-              <td style={{ ...td, textAlign: 'center' }}>{p.direction}</td>
               <td style={{ ...td, textAlign: 'center' }}>{p.enabled ? 'Yes' : 'No'}</td>
               <td style={{ ...td, color: 'var(--text-muted)' }}>
                 {p.last_seen ? new Date(p.last_seen * 1000).toLocaleString() : 'Never'}
@@ -213,7 +199,7 @@ export default function PeerManager() {
             </tr>
           ))}
           {peers.length === 0 && (
-            <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>No peers configured.</td></tr>
+            <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>No peers configured.</td></tr>
           )}
         </tbody>
       </table>
@@ -221,21 +207,14 @@ export default function PeerManager() {
       {/* ------------- API KEYS ------------- */}
       <h2 style={{ fontSize: 16, marginBottom: 10, color: 'var(--text)' }}>API keys</h2>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Each key grants another oneresponse node access to this one. Share the raw key value (shown once at creation) with the remote node's operator.
+        Each key grants another oneresponse node access to this one (both read and write). Share the raw key value (shown once at creation) with the remote node's operator.
       </p>
 
       <form onSubmit={createKey} style={{ ...cardStyle, padding: 14 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px auto', gap: 10, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
           <div>
             <label style={fieldLabel}>Key name (e.g. "probe2-dub")</label>
             <input style={{ ...inputStyle, width: '100%' }} value={newKeyName} onChange={e => setNewKeyName(e.target.value)} placeholder="descriptive name" />
-          </div>
-          <div>
-            <label style={fieldLabel}>Permissions</label>
-            <select style={{ ...inputStyle, width: '100%' }} value={newKeyPerm} onChange={e => setNewKeyPerm(e.target.value as 'read' | 'write')}>
-              <option value="read">read (pull data)</option>
-              <option value="write">write (push data)</option>
-            </select>
           </div>
           <button type="submit" style={{ ...btnStyle, background: 'var(--accent)', color: 'var(--accent-fg)' }}>
             Create key
@@ -252,7 +231,7 @@ export default function PeerManager() {
             borderRadius: 6,
             fontSize: 13,
           }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--text)' }}>
               New key created — copy it now, you won't see it again.
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -278,11 +257,10 @@ export default function PeerManager() {
         )}
       </form>
 
-      <table style={{ width: '100%', background: 'var(--bg-card)', color: 'var(--text)', borderRadius: 8, boxShadow: 'var(--shadow)', borderCollapse: 'collapse' }}>
+      <table style={{ width: '100%', background: 'var(--bg-card)', color: 'var(--text)', borderRadius: 8, boxShadow: 'var(--shadow)', border: '1px solid var(--border)', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--border)' }}>
             <th style={th}>Name</th>
-            <th style={{ ...th, textAlign: 'center' }}>Permissions</th>
             <th style={th}>Created</th>
             <th style={{ ...th, textAlign: 'right' }}>Actions</th>
           </tr>
@@ -291,7 +269,6 @@ export default function PeerManager() {
           {keys.map(k => (
             <tr key={k.id} style={{ borderBottom: '1px solid var(--border)' }}>
               <td style={{ ...td, fontWeight: 600 }}>{k.name}</td>
-              <td style={{ ...td, textAlign: 'center' }}>{k.permissions}</td>
               <td style={{ ...td, color: 'var(--text-muted)' }}>{new Date(k.created_at * 1000).toLocaleString()}</td>
               <td style={{ ...td, textAlign: 'right' }}>
                 <button onClick={() => deleteKey(k.id)} style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}>Revoke</button>
@@ -299,7 +276,7 @@ export default function PeerManager() {
             </tr>
           ))}
           {keys.length === 0 && (
-            <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>No API keys yet. Create one above.</td></tr>
+            <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>No API keys yet. Create one above.</td></tr>
           )}
         </tbody>
       </table>
@@ -308,7 +285,7 @@ export default function PeerManager() {
 }
 
 const fieldLabel: React.CSSProperties = { fontSize: 12, color: 'var(--text-muted)' };
-const th: React.CSSProperties = { padding: '10px 16px', textAlign: 'left', fontSize: 13, color: 'var(--text)' };
+const th: React.CSSProperties = { padding: '10px 16px', textAlign: 'left', fontSize: 13, color: 'var(--text)', fontWeight: 600 };
 const td: React.CSSProperties = { padding: '10px 16px', color: 'var(--text)' };
 const inlineCode: React.CSSProperties = {
   background: 'var(--bg-hover)',
