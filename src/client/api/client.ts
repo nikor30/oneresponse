@@ -65,6 +65,11 @@ export interface DashboardTarget {
   jitter: number | null;
   loss_pct: number | null;
   sla_score: number | null;
+  // Lifetime min/max latency across all stored measurements — drives the
+  // permanent drift line on the dart chart.
+  latency_min_lifetime: number | null;
+  latency_max_lifetime: number | null;
+  sample_count: number | null;
 }
 
 export interface DashboardGroup {
