@@ -18,9 +18,37 @@ router.use('/peers', peersRouter);
 router.get('/dashboard', (_req: Request, res: Response) => {
   const db = getDb();
 
-  // Latest measurement + lifetime min/max range per target. The lifetime
-  // values feed the dart chart's permanent drift lines.
+  // Latest measurement + lifetime drift (5th / 95th percentile of latency_avg)
+  // per target. Using latency_avg = median of 20 pings means a single bad
+  // ping inside a sample can't blow up the range. Percentiles trim the
+  // top/bottom 5 % so an isolated bad sample doesn't pin the drift line
+  // to the chart edge. With < 20 samples we fall back to plain MIN/MAX.
   const dashboard = db.prepare(`
+    WITH ranked AS (
+      SELECT
+        target_id,
+        latency_avg,
+        NTILE(20) OVER (PARTITION BY target_id ORDER BY latency_avg ASC) AS tile
+      FROM measurements
+      WHERE peer_id IS NULL
+        AND loss_pct < 100
+        AND latency_avg > 0
+    ),
+    lifetime AS (
+      SELECT
+        target_id,
+        CASE WHEN COUNT(*) >= 20
+          THEN MAX(CASE WHEN tile = 1 THEN latency_avg END)
+          ELSE MIN(latency_avg)
+        END AS latency_min_lifetime,
+        CASE WHEN COUNT(*) >= 20
+          THEN MIN(CASE WHEN tile = 20 THEN latency_avg END)
+          ELSE MAX(latency_avg)
+        END AS latency_max_lifetime,
+        COUNT(*) AS sample_count
+      FROM ranked
+      GROUP BY target_id
+    )
     SELECT
       g.id as group_id, g.name as group_name,
       g.sla_latency_ms, g.sla_jitter_ms, g.sla_loss_pct,
@@ -35,19 +63,7 @@ router.get('/dashboard', (_req: Request, res: Response) => {
       WHERE target_id = t.id AND peer_id IS NULL
       ORDER BY timestamp DESC LIMIT 1
     )
-    LEFT JOIN (
-      SELECT
-        target_id,
-        MIN(latency_min) AS latency_min_lifetime,
-        MAX(latency_max) AS latency_max_lifetime,
-        COUNT(*)         AS sample_count
-      FROM measurements
-      WHERE peer_id IS NULL
-        AND loss_pct < 100        -- exclude total-failure samples (prober stores latency_*=0)
-        AND latency_min IS NOT NULL
-        AND latency_min > 0
-      GROUP BY target_id
-    ) lt ON lt.target_id = t.id
+    LEFT JOIN lifetime lt ON lt.target_id = t.id
     WHERE t.enabled = 1
     ORDER BY g.name, t.name
   `).all();
