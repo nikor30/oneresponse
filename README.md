@@ -89,6 +89,7 @@ To measure from multiple locations:
 
 <img width="1102" height="1059" alt="Bildschirmfoto_20260519_113114" src="https://github.com/user-attachments/assets/984dcb70-d0d0-43b5-81a8-95406f863e1e" />
 
+<img width="1418" height="905" alt="Bildschirmfoto_20260519_212123" src="https://github.com/user-attachments/assets/50c9bdd0-6ba4-4460-b711-e81b8789d5f8" />
 
 ## Architecture
 
