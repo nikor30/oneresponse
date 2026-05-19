@@ -108,7 +108,17 @@ export interface Peer {
   direction: string;
   enabled: number;
   last_seen: number | null;
+  last_error: string | null;
   created_at: number;
+}
+
+export interface PeerTestResult {
+  ok: boolean;
+  status?: number;
+  elapsed_ms: number;
+  url: string;
+  site_name?: string;
+  error?: string;
 }
 
 export interface ApiKey {
@@ -187,6 +197,8 @@ export const api = {
   updatePeer: (id: string, data: Partial<Peer & { api_key: string }>) =>
     request<Peer>(`/peers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePeer: (id: string) => request<void>(`/peers/${id}`, { method: 'DELETE' }),
+  testPeer: (id: string) =>
+    request<PeerTestResult>(`/peers/${id}/test`, { method: 'POST', body: '{}' }),
 
   // API keys (for granting other oneresponse nodes / peers access to this node).
   // Keys always carry read+write so a paired peer can both fetch our data and

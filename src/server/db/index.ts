@@ -29,6 +29,7 @@ function runMigrations(d: Database.Database): void {
   };
   ensureCol('groups', 'viz_latency_min', 'REAL');
   ensureCol('groups', 'viz_latency_max', 'REAL');
+  ensureCol('peers', 'last_error', 'TEXT');
 }
 
 export function closeDb(): void {
