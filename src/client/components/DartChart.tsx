@@ -284,16 +284,48 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
         .text(groupData.group.name);
 
       // Small ms-tick labels along an off-axis line so they don't overlap
-      // target dots in the segment. Ticks span the group's viz range:
-      // center = vizMin, 0.7 = SLA threshold, edge = vizMax.
+      // target dots in the segment. We use d3's nice-number generator
+      // across the viz range, then anchor each value to its true radius
+      // via latencyToRadius. The SLA threshold is always included and
+      // duplicate-valued ticks are collapsed so a min == threshold or
+      // threshold == max range doesn't print the same number twice.
       const tickAngle = startAngle + anglePerGroup * 0.18;
       const vr = vizRangeFor(groupData.group);
-      const ticks: { frac: number; ms: number; bold?: boolean }[] = [
-        { frac: 0.35, ms: vr.min + (vr.threshold - vr.min) * 0.5 },
-        { frac: 0.7,  ms: vr.threshold, bold: true },
-        { frac: 0.85, ms: vr.threshold + (vr.max - vr.threshold) * 0.5 },
-        { frac: 1.0,  ms: vr.max },
-      ];
+
+      // Ask d3 for nice tick values separately on each side of the SLA
+      // threshold so both the green zone (below SLA) and the red zone
+      // (above SLA) get labels even when the overall range is very wide
+      // (e.g. center=50, edge=6000 — natural ticks would all land in red).
+      const candidates: { ms: number; frac: number; bold: boolean }[] = [];
+      const greenScale = d3.scaleLinear().domain([vr.min, vr.threshold]);
+      const redScale   = d3.scaleLinear().domain([vr.threshold, vr.max]);
+      for (const v of greenScale.ticks(4)) {
+        if (v <= vr.min + 1e-6 || v >= vr.threshold - 1e-6) continue;
+        candidates.push({ ms: v, frac: latencyToRadius(v, vr), bold: false });
+      }
+      for (const v of redScale.ticks(4)) {
+        if (v <= vr.threshold + 1e-6 || v >= vr.max - 1e-6) continue;
+        candidates.push({ ms: v, frac: latencyToRadius(v, vr), bold: false });
+      }
+      // Always pin the SLA threshold (at radius 0.7) and the edge (at 1.0)
+      candidates.push({ ms: vr.threshold, frac: 0.7, bold: true });
+      if (vr.max > vr.threshold + 1e-6) {
+        candidates.push({ ms: vr.max, frac: 1.0, bold: false });
+      }
+
+      candidates.sort((a, b) => a.frac - b.frac);
+      // Deduplicate: drop a tick if its ms label and its radius are both
+      // close to the previous one. The bold (SLA) tick wins ties.
+      const ticks: typeof candidates = [];
+      for (const t of candidates) {
+        const last = ticks[ticks.length - 1];
+        if (last && Math.abs(last.ms - t.ms) < 0.5 && Math.abs(last.frac - t.frac) < 0.04) {
+          if (t.bold) ticks[ticks.length - 1] = t;
+          continue;
+        }
+        ticks.push(t);
+      }
+
       const tcos = Math.cos(tickAngle), tsin = Math.sin(tickAngle);
       const perpX = Math.cos(tickAngle + Math.PI / 2), perpY = Math.sin(tickAngle + Math.PI / 2);
 
@@ -534,9 +566,10 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
         width: '100%',
         maxWidth: 820,
         margin: '0 auto',
-        background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+        background: 'var(--chart-bg)',
+        border: '1px solid var(--border)',
         borderRadius: 12,
-        boxShadow: '0 4px 20px rgba(15, 23, 42, 0.08)',
+        boxShadow: 'var(--shadow-md)',
         padding: 16,
       }}
     >
