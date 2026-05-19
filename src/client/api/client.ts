@@ -48,6 +48,9 @@ export interface Measurement {
   loss_pct: number;
   probe_count: number;
   sla_score: number;
+  // Individual ping round-trip times for this sample. Only populated when
+  // the query is not bucketed (i.e. ≤ 24h ranges).
+  rtts: number[] | null;
 }
 
 export interface DashboardTarget {
