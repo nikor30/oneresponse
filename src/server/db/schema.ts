@@ -69,5 +69,18 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at INTEGER DEFAULT (unixepoch())
 );
 
+-- Pre-computed lifetime drift bounds per target so the dashboard query
+-- doesn't have to run NTILE(20) over the entire measurements table on
+-- every render. Refreshed periodically by the maintenance job.
+CREATE TABLE IF NOT EXISTS target_stats (
+  target_id TEXT PRIMARY KEY REFERENCES targets(id) ON DELETE CASCADE,
+  latency_min_lifetime REAL,
+  latency_max_lifetime REAL,
+  sample_count INTEGER,
+  updated_at INTEGER
+);
+
 INSERT OR IGNORE INTO settings (key, value) VALUES ('site_name', 'oneresponse');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_raw_days', '90');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_rtts_days', '7');
 `;

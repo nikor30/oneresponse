@@ -6,6 +6,7 @@ import fs from 'fs';
 import apiRouter from './api/router.js';
 import { getDb } from './db/index.js';
 import { startScheduler } from './monitor/scheduler.js';
+import { startMaintenance } from './maintenance.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3000');
@@ -44,4 +45,7 @@ app.listen(PORT, () => {
 
   // Start monitoring scheduler
   startScheduler();
+
+  // Start background maintenance (stats refresh + retention)
+  startMaintenance();
 });

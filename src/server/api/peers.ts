@@ -11,9 +11,11 @@ router.get('/', (_req: Request, res: Response) => {
   res.json(peers);
 });
 
+// Peer direction is always 'both' now (the UI dropdown was confusing for
+// the common case). The column is kept for back-compat with existing rows.
 router.post('/', (req: Request, res: Response) => {
   const db = getDb();
-  const { name, url, api_key, direction } = req.body;
+  const { name, url, api_key } = req.body;
   if (!name || !url || !api_key) {
     return res.status(400).json({ error: 'name, url, and api_key are required' });
   }
@@ -21,8 +23,8 @@ router.post('/', (req: Request, res: Response) => {
   const id = uuidv4();
   db.prepare(`
     INSERT INTO peers (id, name, url, api_key, direction)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(id, name, url, api_key, direction || 'both');
+    VALUES (?, ?, ?, ?, 'both')
+  `).run(id, name, url, api_key);
 
   const peer = db.prepare('SELECT id, name, url, direction, enabled, last_seen, created_at FROM peers WHERE id = ?').get(id);
   res.status(201).json(peer);
@@ -33,15 +35,14 @@ router.put('/:id', (req: Request, res: Response) => {
   const existing = db.prepare('SELECT * FROM peers WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
   if (!existing) return res.status(404).json({ error: 'Peer not found' });
 
-  const { name, url, api_key, direction, enabled } = req.body;
+  const { name, url, api_key, enabled } = req.body;
   db.prepare(`
-    UPDATE peers SET name = ?, url = ?, api_key = ?, direction = ?, enabled = ?
+    UPDATE peers SET name = ?, url = ?, api_key = ?, direction = 'both', enabled = ?
     WHERE id = ?
   `).run(
     name ?? existing.name,
     url ?? existing.url,
     api_key ?? existing.api_key,
-    direction ?? existing.direction,
     enabled ?? existing.enabled,
     req.params.id
   );

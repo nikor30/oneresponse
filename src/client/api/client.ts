@@ -188,12 +188,14 @@ export const api = {
     request<Peer>(`/peers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePeer: (id: string) => request<void>(`/peers/${id}`, { method: 'DELETE' }),
 
-  // API keys (for granting other oneresponse nodes / peers access to this node)
+  // API keys (for granting other oneresponse nodes / peers access to this node).
+  // Keys always carry read+write so a paired peer can both fetch our data and
+  // push their own — there's no longer a permissions choice in the UI.
   getApiKeys: () => request<ApiKey[]>('/api-keys'),
-  createApiKey: (name: string, permissions: 'read' | 'write' = 'read') =>
+  createApiKey: (name: string) =>
     request<ApiKeyWithSecret>('/api-keys', {
       method: 'POST',
-      body: JSON.stringify({ name, permissions }),
+      body: JSON.stringify({ name }),
     }),
   deleteApiKey: (id: string) => request<void>(`/api-keys/${id}`, { method: 'DELETE' }),
 
