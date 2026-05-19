@@ -60,4 +60,12 @@ CREATE TABLE IF NOT EXISTS api_keys (
   permissions TEXT DEFAULT 'read',
   created_at INTEGER DEFAULT (unixepoch())
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at INTEGER DEFAULT (unixepoch())
+);
+
+INSERT OR IGNORE INTO settings (key, value) VALUES ('site_name', 'oneresponse');
 `;

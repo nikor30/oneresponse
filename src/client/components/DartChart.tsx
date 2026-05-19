@@ -391,27 +391,46 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
         const dotX = cos * currentR;
         const dotY = sin * currentR;
 
-        const dotGroup = g.append('g').attr('cursor', 'pointer');
-        // Halo
+        const dotGroup = g.append('g');
+
+        // Tooltip helpers — shared between dot and label hover handlers
+        const showTip = (event: MouseEvent) => {
+          const rect = svgRef.current!.getBoundingClientRect();
+          setTooltip({
+            target,
+            groupName: groupData.group.name,
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+          });
+        };
+        const hideTip = () => setTooltip(null);
+
+        // Halo — non-interactive
         dotGroup.append('circle')
           .attr('cx', dotX).attr('cy', dotY)
           .attr('r', 11)
           .attr('fill', dotFill)
-          .attr('opacity', 0.28);
+          .attr('opacity', 0.14)
+          .style('pointer-events', 'none');
+        // Translucent dot — 50% opacity status indicator; hover shows
+        // tooltip but click does nothing (labels are the click target).
         const dot = dotGroup.append('circle')
           .attr('cx', dotX).attr('cy', dotY)
           .attr('r', 6.5)
           .attr('fill', dotFill)
           .attr('stroke', dotStroke)
           .attr('stroke-width', 2)
+          .attr('opacity', 0.5)
           .attr('filter', 'url(#dot-glow)');
+        dot.on('mouseover', (event: MouseEvent) => { dot.attr('r', 8); showTip(event); });
+        dot.on('mouseout', () => { dot.attr('r', 6.5); hideTip(); });
 
-        // Floating label pill: name · current latency
+        // Floating label pill — primary click target (bigger than the dot)
         const labelDist = 14;
         const anchor = cos > 0.15 ? 'start' : cos < -0.15 ? 'end' : 'middle';
         const lg = dotGroup.append('g')
           .attr('transform', `translate(${dotX + cos * labelDist},${dotY + sin * labelDist})`)
-          .style('pointer-events', 'none')
+          .style('cursor', 'pointer')
           .attr('filter', 'url(#label-shadow)');
         const labelText = `${target.name} · ${formatMs(target.latency_avg)}`;
         const padX = 6, padY = 3, fontPx = 11;
@@ -419,7 +438,7 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
         const rectX = anchor === 'start' ? -padX
                     : anchor === 'end'   ? -approxW - padX
                                           : -approxW / 2 - padX;
-        lg.append('rect')
+        const labelRect = lg.append('rect')
           .attr('x', rectX)
           .attr('y', -fontPx / 2 - padY)
           .attr('width', approxW + padX * 2)
@@ -437,21 +456,17 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
           .attr('fill', '#0f172a')
           .text(labelText);
 
-        dotGroup.on('mouseover', (event: MouseEvent) => {
+        lg.on('mouseover', (event: MouseEvent) => {
+          labelRect.attr('fill', 'rgba(255,255,255,0.98)').attr('stroke-width', 1.6).attr('stroke-opacity', 1);
           dot.attr('r', 8);
-          const rect = svgRef.current!.getBoundingClientRect();
-          setTooltip({
-            target,
-            groupName: groupData.group.name,
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top,
-          });
+          showTip(event);
         });
-        dotGroup.on('mouseout', () => {
+        lg.on('mouseout', () => {
+          labelRect.attr('fill', 'rgba(255,255,255,0.85)').attr('stroke-width', 0.8).attr('stroke-opacity', 0.6);
           dot.attr('r', 6.5);
-          setTooltip(null);
+          hideTip();
         });
-        dotGroup.on('click', () => onTargetClick(target.id));
+        lg.on('click', () => onTargetClick(target.id));
       });
     });
 

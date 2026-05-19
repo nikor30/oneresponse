@@ -21,11 +21,37 @@ export default function SettingsDrawer({ open, onClose }: Props) {
   const [edits, setEdits] = useState<Record<string, Partial<Group>>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [siteName, setSiteName] = useState<string>('');
+  const [siteNameSaved, setSiteNameSaved] = useState<string>('');
+  const [siteSaving, setSiteSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     api.getGroups().then(setGroups).catch(e => setErr(e.message));
+    api.getSettings()
+      .then(s => {
+        const v = s.site_name || 'oneresponse';
+        setSiteName(v);
+        setSiteNameSaved(v);
+      })
+      .catch(() => { /* ignore */ });
   }, [open]);
+
+  const saveSiteName = async () => {
+    const v = siteName.trim() || 'oneresponse';
+    setSiteSaving(true);
+    try {
+      const updated = await api.updateSettings({ site_name: v });
+      setSiteNameSaved(updated.site_name || v);
+      setSiteName(updated.site_name || v);
+      // Notify the dashboard so the heading updates without a reload
+      window.dispatchEvent(new CustomEvent('oneresponse:settings-changed', { detail: updated }));
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setSiteSaving(false);
+    }
+  };
 
   // Close on Escape
   useEffect(() => {
@@ -114,6 +140,50 @@ export default function SettingsDrawer({ open, onClose }: Props) {
               <span style={{ marginRight: 10 }}>{n.icon}</span> {n.label}
             </NavRow>
           ))}
+
+          <SectionTitle style={{ marginTop: 20 }}>This instance</SectionTitle>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, color: muted, marginBottom: 4 }}>
+              Name shown above the dashboard
+            </label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                type="text"
+                value={siteName}
+                onChange={e => setSiteName(e.target.value)}
+                placeholder="e.g. Europe Peer"
+                style={{
+                  flex: 1,
+                  padding: '6px 10px',
+                  background: 'var(--bg-page)',
+                  color: 'var(--text)',
+                  border: `1px solid ${border}`,
+                  borderRadius: 4,
+                  fontSize: 13,
+                }}
+              />
+              <button
+                onClick={saveSiteName}
+                disabled={siteSaving || siteName.trim() === siteNameSaved}
+                style={{
+                  padding: '4px 12px',
+                  background: 'var(--accent)',
+                  color: 'var(--accent-fg)',
+                  border: 0,
+                  borderRadius: 4,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: siteName.trim() === siteNameSaved ? 'default' : 'pointer',
+                  opacity: siteName.trim() === siteNameSaved ? 0.5 : 1,
+                }}
+              >
+                {siteSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+              Use a name that distinguishes this node when you have multiple peers.
+            </div>
+          </div>
 
           <SectionTitle style={{ marginTop: 20 }}>Appearance</SectionTitle>
           <div style={{ display: 'flex', gap: 6 }}>
