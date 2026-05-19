@@ -51,14 +51,14 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
-  const [size, setSize] = useState(720);
+  const [size, setSize] = useState(800);
 
-  // Responsive sizing
+  // Responsive sizing — caps at 900 (≈10% larger than before)
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
         const w = containerRef.current.clientWidth;
-        setSize(Math.min(w, 820));
+        setSize(Math.min(w, 900));
       }
     };
     updateSize();
@@ -299,11 +299,12 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
       const candidates: { ms: number; frac: number; bold: boolean }[] = [];
       const greenScale = d3.scaleLinear().domain([vr.min, vr.threshold]);
       const redScale   = d3.scaleLinear().domain([vr.threshold, vr.max]);
-      for (const v of greenScale.ticks(4)) {
+      // Halved the tick density per zone — the chart was crowded before.
+      for (const v of greenScale.ticks(2)) {
         if (v <= vr.min + 1e-6 || v >= vr.threshold - 1e-6) continue;
         candidates.push({ ms: v, frac: latencyToRadius(v, vr), bold: false });
       }
-      for (const v of redScale.ticks(4)) {
+      for (const v of redScale.ticks(2)) {
         if (v <= vr.threshold + 1e-6 || v >= vr.max - 1e-6) continue;
         candidates.push({ ms: v, frac: latencyToRadius(v, vr), bold: false });
       }
@@ -564,7 +565,7 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
       style={{
         position: 'relative',
         width: '100%',
-        maxWidth: 820,
+        maxWidth: 900,
         margin: '0 auto',
         background: 'var(--chart-bg)',
         border: '1px solid var(--border)',

@@ -6,6 +6,7 @@ import TargetDetail from './pages/TargetDetail';
 import TargetManager from './pages/TargetManager';
 import GroupManager from './pages/GroupManager';
 import PeerManager from './pages/PeerManager';
+import Top10Page from './pages/Top10';
 import { ThemeProvider } from './theme/ThemeContext';
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
         <Layout>
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/top" element={<Top10Page />} />
             <Route path="/targets" element={<TargetManager />} />
             <Route path="/targets/:id" element={<TargetDetail />} />
             <Route path="/groups" element={<GroupManager />} />
