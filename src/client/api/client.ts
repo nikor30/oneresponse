@@ -77,6 +77,18 @@ export interface DashboardGroup {
   targets: DashboardTarget[];
 }
 
+// One pane in the multi-instance dashboard. `peer_id == null` means the
+// local node; otherwise it's a remote peer whose data we fetched live.
+export interface DashboardNode {
+  peer_id: string | null;
+  peer_name: string | null;
+  url: string | null;
+  site_name: string;
+  dashboard: DashboardGroup[];
+  last_seen: number | null;
+  error: string | null;
+}
+
 export interface Peer {
   id: string;
   name: string;
@@ -103,6 +115,7 @@ export interface ApiKeyWithSecret extends ApiKey {
 export const api = {
   // Dashboard
   getDashboard: () => request<DashboardGroup[]>('/dashboard'),
+  getDashboardAggregate: () => request<DashboardNode[]>('/dashboard/aggregate'),
 
   // Groups
   getGroups: () => request<Group[]>('/groups'),

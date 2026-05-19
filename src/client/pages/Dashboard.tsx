@@ -1,24 +1,18 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, type DashboardGroup } from '../api/client';
+import { api, type DashboardNode } from '../api/client';
 import DartChart from '../components/DartChart';
 import GroupSelector from '../components/GroupSelector';
 
 export default function Dashboard() {
-  const [data, setData] = useState<DashboardGroup[]>([]);
-  const [siteName, setSiteName] = useState<string>('');
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [nodes, setNodes] = useState<DashboardNode[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
     try {
-      const [dashboard, settings] = await Promise.all([
-        api.getDashboard(),
-        api.getSettings().catch(() => ({} as Record<string, string | null>)),
-      ]);
-      setData(dashboard);
-      setSiteName(settings.site_name || 'oneresponse');
+      const data = await api.getDashboardAggregate();
+      setNodes(data);
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -32,27 +26,19 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Re-read the site name when the user updates it from the settings drawer
+  // Refresh when site name changes from the settings drawer so the local
+  // pane's heading updates without waiting for the next poll
   useEffect(() => {
-    const onSettings = (e: Event) => {
-      const detail = (e as CustomEvent<Record<string, string | null>>).detail;
-      if (detail && typeof detail.site_name === 'string') {
-        setSiteName(detail.site_name || 'oneresponse');
-      }
-    };
+    const onSettings = () => loadData();
     window.addEventListener('oneresponse:settings-changed', onSettings);
     return () => window.removeEventListener('oneresponse:settings-changed', onSettings);
-  }, []);
-
-  const handleTargetClick = useCallback((targetId: string) => {
-    navigate(`/targets/${targetId}`);
-  }, [navigate]);
+  }, [loadData]);
 
   if (loading) {
     return <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-dim)' }}>Loading dashboard...</div>;
   }
 
-  if (data.length === 0) {
+  if (nodes.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: 60 }}>
         <h2 style={{ color: 'var(--text-muted)', marginBottom: 16 }}>No monitoring data yet</h2>
@@ -63,6 +49,46 @@ export default function Dashboard() {
       </div>
     );
   }
+
+  return (
+    <div style={{
+      display: 'grid',
+      gap: 24,
+      gridTemplateColumns: nodes.length > 1
+        ? 'repeat(auto-fit, minmax(640px, 1fr))'
+        : 'minmax(0, 820px)',
+      justifyContent: 'center',
+      justifyItems: 'center',
+    }}>
+      {nodes.map(node => (
+        <NodePane
+          key={node.peer_id ?? 'local'}
+          node={node}
+          onTargetClick={(targetId) => {
+            if (node.peer_id == null) {
+              // Local target — open the detail view in-app
+              navigate(`/targets/${targetId}`);
+            } else if (node.url) {
+              // Remote target — open the peer's UI in a new tab
+              window.open(`${node.url.replace(/\/$/, '')}/targets/${targetId}`, '_blank', 'noopener,noreferrer');
+            }
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function NodePane({
+  node,
+  onTargetClick,
+}: {
+  node: DashboardNode;
+  onTargetClick: (targetId: string) => void;
+}) {
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const isRemote = node.peer_id != null;
+  const data = node.dashboard;
 
   const totalTargets = data.reduce((n, g) => n + g.targets.length, 0);
   const breached = data.reduce(
@@ -75,8 +101,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div>
-      {/* Instance/site name — identifies which oneresponse node you're viewing */}
+    <div style={{ width: '100%', maxWidth: 820 }}>
       <div style={{
         textAlign: 'center',
         marginBottom: 8,
@@ -84,43 +109,74 @@ export default function Dashboard() {
         fontWeight: 700,
         textTransform: 'uppercase',
         letterSpacing: '0.12em',
-        color: 'var(--text-dim)',
+        color: isRemote ? 'var(--accent)' : 'var(--text-dim)',
       }}>
-        oneresponse instance
+        {isRemote ? '🌐 remote peer' : 'this instance'}
       </div>
-      <h1 style={{
+      <h2 style={{
         textAlign: 'center',
-        fontSize: 30,
+        fontSize: 26,
         margin: 0,
         marginBottom: 4,
         fontWeight: 800,
-        letterSpacing: -0.5,
+        letterSpacing: -0.4,
         color: 'var(--text)',
       }}>
-        {siteName}
-      </h1>
+        {node.site_name}
+      </h2>
       <div style={{
         textAlign: 'center',
         fontSize: 13,
         color: 'var(--text-muted)',
-        marginBottom: 20,
+        marginBottom: 16,
       }}>
         Real-Time SLA View
+        {isRemote && node.last_seen != null && (
+          <> &nbsp;·&nbsp; updated {new Date(node.last_seen * 1000).toLocaleTimeString()}</>
+        )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-        <GroupSelector
-          groups={data.map(d => ({ id: d.group.id, name: d.group.name }))}
-          selected={selectedGroup}
-          onSelect={setSelectedGroup}
-        />
-        <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--text-muted)' }}>
-          <span><strong style={{ color: 'var(--text)' }}>{totalTargets}</strong> targets</span>
-          <span><strong style={{ color: breached > 0 ? '#dc2626' : '#16a34a' }}>{breached}</strong> breached</span>
-          {noData > 0 && <span><strong style={{ color: 'var(--text-dim)' }}>{noData}</strong> awaiting data</span>}
+      {node.error ? (
+        <div style={{
+          background: 'rgba(220,38,38,0.08)',
+          border: '1px solid rgba(220,38,38,0.35)',
+          color: '#dc2626',
+          padding: '14px 18px',
+          borderRadius: 8,
+          fontSize: 13,
+          textAlign: 'center',
+        }}>
+          Could not reach this peer: <code>{node.error}</code>
         </div>
-      </div>
-      <DartChart data={data} onTargetClick={handleTargetClick} selectedGroup={selectedGroup} />
+      ) : data.length === 0 ? (
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px dashed var(--border)',
+          color: 'var(--text-muted)',
+          padding: '20px 18px',
+          borderRadius: 8,
+          fontSize: 13,
+          textAlign: 'center',
+        }}>
+          {isRemote ? 'Peer reachable but has no monitoring data yet.' : 'No monitoring data yet.'}
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+            <GroupSelector
+              groups={data.map(d => ({ id: d.group.id, name: d.group.name }))}
+              selected={selectedGroup}
+              onSelect={setSelectedGroup}
+            />
+            <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)' }}>
+              <span><strong style={{ color: 'var(--text)' }}>{totalTargets}</strong> targets</span>
+              <span><strong style={{ color: breached > 0 ? '#dc2626' : '#16a34a' }}>{breached}</strong> breached</span>
+              {noData > 0 && <span><strong style={{ color: 'var(--text-dim)' }}>{noData}</strong> awaiting data</span>}
+            </div>
+          </div>
+          <DartChart data={data} onTargetClick={onTargetClick} selectedGroup={selectedGroup} />
+        </>
+      )}
     </div>
   );
 }
