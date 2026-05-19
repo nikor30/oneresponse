@@ -53,12 +53,13 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [size, setSize] = useState(800);
 
-  // Responsive sizing — caps at 900 (≈10% larger than before)
+  // Responsive sizing — cap higher (1000) so two charts side-by-side on a
+  // wide screen can each use ~half the viewport width comfortably.
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
         const w = containerRef.current.clientWidth;
-        setSize(Math.min(w, 900));
+        setSize(Math.min(w, 1000));
       }
     };
     updateSize();
@@ -275,7 +276,7 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
       const textEl = g.append('text')
         .attr('font-size', 16)
         .attr('font-weight', 700)
-        .attr('fill', '#0f172a')
+        .style('fill', 'var(--text)')
         .style('letter-spacing', '0.3px');
       textEl.append('textPath')
         .attr('href', `#${pathId}`)
@@ -330,6 +331,14 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
       const tcos = Math.cos(tickAngle), tsin = Math.sin(tickAngle);
       const perpX = Math.cos(tickAngle + Math.PI / 2), perpY = Math.sin(tickAngle + Math.PI / 2);
 
+      // Rotation that makes each label "lean into the circle" — text reads
+      // along the tangent at the spoke's circular position. Flip 180° on
+      // the bottom half so it never appears upside down.
+      let tickRotDeg = ((tickAngle + Math.PI / 2) * 180) / Math.PI;
+      if (Math.sin(tickAngle) > 0) tickRotDeg += 180;
+      // Normalise to (-180, 180] just to keep transforms tidy
+      tickRotDeg = ((tickRotDeg + 180) % 360) - 180;
+
       ticks.forEach(({ frac, ms, bold }) => {
         const tx = tcos * radius * frac;
         const ty = tsin * radius * frac;
@@ -339,22 +348,22 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
         const fontSize = bold ? 10 : 9;
         const approxW = labelStr.length * fontSize * 0.55;
         const lg = g.append('g')
-          .attr('transform', `translate(${offX},${offY})`)
+          .attr('transform', `translate(${offX},${offY}) rotate(${tickRotDeg})`)
           .attr('pointer-events', 'none')
           .attr('filter', 'url(#label-shadow)');
         lg.append('rect')
           .attr('x', -approxW / 2 - 3).attr('y', -fontSize / 2 - 2)
           .attr('width', approxW + 6).attr('height', fontSize + 4)
           .attr('rx', 3)
-          .attr('fill', 'rgba(255,255,255,0.82)')
-          .attr('stroke', bold ? 'rgba(15,23,42,0.55)' : 'transparent')
-          .attr('stroke-width', bold ? 0.7 : 0);
+          .style('fill', 'var(--pill-bg)')
+          .style('stroke', bold ? 'var(--text-muted)' : 'transparent')
+          .style('stroke-width', bold ? 0.7 : 0);
         lg.append('text')
           .attr('text-anchor', 'middle')
           .attr('dominant-baseline', 'middle')
           .attr('font-size', fontSize)
           .attr('font-weight', bold ? 700 : 500)
-          .attr('fill', '#0f172a')
+          .style('fill', 'var(--text)')
           .text(labelStr);
       });
     });
@@ -498,34 +507,35 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
             .attr('width', approxW + padX * 2)
             .attr('height', fontPx + padY * 2)
             .attr('rx', 4)
-            .attr('fill', 'rgba(255,255,255,0.85)')
-            .attr('stroke', dotFill)
-            .attr('stroke-width', 0.8)
-            .attr('stroke-opacity', 0.6);
+            .style('fill', 'var(--pill-bg)')
+            .style('stroke', dotFill)
+            .style('stroke-width', '0.8px')
+            .style('stroke-opacity', '0.6')
+            .style('opacity', '0.92');
           lg.append('text')
             .attr('text-anchor', anchor)
             .attr('dominant-baseline', 'middle')
             .attr('font-size', fontPx)
             .attr('font-weight', 600)
-            .attr('fill', '#0f172a')
+            .style('fill', 'var(--text)')
             .text(labelText);
 
           lg.on('mouseover', (event: MouseEvent) => {
-            labelRect.attr('fill', 'rgba(255,255,255,0.98)').attr('stroke-width', 1.6).attr('stroke-opacity', 1);
+            labelRect.style('opacity', '1').style('stroke-width', '1.6px').style('stroke-opacity', '1');
             dot.attr('r', 8);
             showTip(event);
           });
           lg.on('mouseout', () => {
-            labelRect.attr('fill', 'rgba(255,255,255,0.85)').attr('stroke-width', 0.8).attr('stroke-opacity', 0.6);
+            labelRect.style('opacity', '0.92').style('stroke-width', '0.8px').style('stroke-opacity', '0.6');
             dot.attr('r', 6.5);
             hideTip();
           });
-          lg.on('click', () => onTargetClick(target.id));
+          lg.on('click', () => { hideTip(); onTargetClick(target.id); });
         } else {
           // Labels hidden — fall back to dot as click target so the user
           // can still drill in.
           dot.style('cursor', 'pointer');
-          dot.on('click', () => onTargetClick(target.id));
+          dot.on('click', () => { hideTip(); onTargetClick(target.id); });
         }
       });
     });
@@ -544,17 +554,21 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
       if (it.shape === 'circle') {
         row.append('circle').attr('cx', 7).attr('cy', 7).attr('r', 5.5).attr('fill', it.color);
       } else {
+        // Drift legend swatch — use theme variables so the dark dot at the
+        // end remains visible against the dark card background.
         row.append('line').attr('x1', 0).attr('y1', 7).attr('x2', 14).attr('y2', 7)
-          .attr('stroke', '#ffffff').attr('stroke-width', 4);
+          .style('stroke', 'var(--bg-card)').attr('stroke-width', 4);
         row.append('line').attr('x1', 0).attr('y1', 7).attr('x2', 14).attr('y2', 7)
-          .attr('stroke', it.color).attr('stroke-width', 1.8);
-        row.append('circle').attr('cx', 0).attr('cy', 7).attr('r', 2.5).attr('fill', '#fff').attr('stroke', '#0f172a').attr('stroke-width', 1);
-        row.append('circle').attr('cx', 14).attr('cy', 7).attr('r', 2.5).attr('fill', '#0f172a');
+          .style('stroke', 'var(--text)').attr('stroke-width', 1.8);
+        row.append('circle').attr('cx', 0).attr('cy', 7).attr('r', 2.5)
+          .style('fill', 'var(--bg-card)').style('stroke', 'var(--text)').attr('stroke-width', 1);
+        row.append('circle').attr('cx', 14).attr('cy', 7).attr('r', 2.5)
+          .style('fill', 'var(--text)');
       }
       row.append('text')
         .attr('x', 22).attr('y', 11)
         .attr('font-size', 11)
-        .attr('fill', '#334155')
+        .style('fill', 'var(--text-muted)')
         .text(it.label);
     });
   }, [data, size, selectedGroup, onTargetClick]);
@@ -565,7 +579,7 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
       style={{
         position: 'relative',
         width: '100%',
-        maxWidth: 900,
+        maxWidth: 1000,
         margin: '0 auto',
         background: 'var(--chart-bg)',
         border: '1px solid var(--border)',
