@@ -89,6 +89,20 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
     gMerge.append('feMergeNode').attr('in', 'cb');
     gMerge.append('feMergeNode').attr('in', 'SourceGraphic');
 
+    // Soft drop-shadow for label pills (makes translucent labels readable
+    // against the saturated red zone)
+    const labelShadow = defs.append('filter')
+      .attr('id', 'label-shadow')
+      .attr('x', '-30%').attr('y', '-30%')
+      .attr('width', '160%').attr('height', '160%');
+    labelShadow.append('feGaussianBlur').attr('in', 'SourceAlpha').attr('stdDeviation', 1.6);
+    labelShadow.append('feOffset').attr('dx', 0).attr('dy', 1.2).attr('result', 'lo');
+    labelShadow.append('feComponentTransfer')
+      .append('feFuncA').attr('type', 'linear').attr('slope', 0.45);
+    const lsMerge = labelShadow.append('feMerge');
+    lsMerge.append('feMergeNode');
+    lsMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
     // Subtle radial highlight (sheen) inside each zone — purely cosmetic,
     // gives the chart visual depth like the reference image
     const greenSheen = defs.append('radialGradient')
@@ -210,24 +224,43 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
       .attr('opacity', 0.4);
 
     // -----------------------------------------------------------------
-    // Per-group axis labels + per-segment latency tick labels
+    // Per-group axis labels + per-segment latency tick labels.
+    // Group names are laid along a curved <textPath> so they hug the chart
+    // rim (like the ResponseWatch reference). For segments on the lower
+    // half we reverse the arc direction so text stays upright.
     // -----------------------------------------------------------------
+    const groupLabelR = radius + 22;
     filteredData.forEach((groupData, groupIdx) => {
       const startAngle = groupIdx * anglePerGroup - Math.PI / 2;
       const midAngle = startAngle + anglePerGroup / 2;
+      const arcSpan = anglePerGroup * 0.85;
+      const aStart = midAngle - arcSpan / 2;
+      const aEnd   = midAngle + arcSpan / 2;
+      const flipped = Math.sin(midAngle) > 0; // lower half in SVG coords
 
-      const labelR = radius + 28;
-      const labelX = Math.cos(midAngle) * labelR;
-      const labelY = Math.sin(midAngle) * labelR;
-      const labelDeg = (midAngle * 180) / Math.PI;
-      g.append('text')
-        .attr('x', labelX).attr('y', labelY)
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'middle')
-        .attr('transform', `rotate(${labelDeg > 90 || labelDeg < -90 ? labelDeg + 180 : labelDeg}, ${labelX}, ${labelY})`)
-        .attr('font-size', 13)
+      // For lower half we reverse the arc so the text reads upright.
+      const [a1, a2, sweep] = flipped
+        ? [aEnd, aStart, 0]
+        : [aStart, aEnd, 1];
+      const x1 = Math.cos(a1) * groupLabelR;
+      const y1 = Math.sin(a1) * groupLabelR;
+      const x2 = Math.cos(a2) * groupLabelR;
+      const y2 = Math.sin(a2) * groupLabelR;
+      const pathId = `group-arc-${groupIdx}`;
+      defs.append('path')
+        .attr('id', pathId)
+        .attr('d', `M ${x1},${y1} A ${groupLabelR},${groupLabelR} 0 0 ${sweep} ${x2},${y2}`)
+        .attr('fill', 'none');
+
+      const textEl = g.append('text')
+        .attr('font-size', 16)
         .attr('font-weight', 700)
         .attr('fill', '#0f172a')
+        .style('letter-spacing', '0.3px');
+      textEl.append('textPath')
+        .attr('href', `#${pathId}`)
+        .attr('startOffset', '50%')
+        .attr('text-anchor', 'middle')
         .text(groupData.group.name);
 
       // Small ms-tick labels along an off-axis line so they don't overlap
@@ -251,14 +284,17 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
         const labelStr = `${formatMs(ms)}${bold ? ' (SLA)' : ''}`;
         const fontSize = bold ? 10 : 9;
         const approxW = labelStr.length * fontSize * 0.55;
-        const lg = g.append('g').attr('transform', `translate(${offX},${offY})`).attr('pointer-events', 'none');
+        const lg = g.append('g')
+          .attr('transform', `translate(${offX},${offY})`)
+          .attr('pointer-events', 'none')
+          .attr('filter', 'url(#label-shadow)');
         lg.append('rect')
           .attr('x', -approxW / 2 - 3).attr('y', -fontSize / 2 - 2)
           .attr('width', approxW + 6).attr('height', fontSize + 4)
           .attr('rx', 3)
-          .attr('fill', 'rgba(255,255,255,0.92)')
-          .attr('stroke', bold ? '#0f172a' : 'transparent')
-          .attr('stroke-width', bold ? 0.8 : 0);
+          .attr('fill', 'rgba(255,255,255,0.82)')
+          .attr('stroke', bold ? 'rgba(15,23,42,0.55)' : 'transparent')
+          .attr('stroke-width', bold ? 0.7 : 0);
         lg.append('text')
           .attr('text-anchor', 'middle')
           .attr('dominant-baseline', 'middle')
@@ -375,7 +411,8 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
         const anchor = cos > 0.15 ? 'start' : cos < -0.15 ? 'end' : 'middle';
         const lg = dotGroup.append('g')
           .attr('transform', `translate(${dotX + cos * labelDist},${dotY + sin * labelDist})`)
-          .style('pointer-events', 'none');
+          .style('pointer-events', 'none')
+          .attr('filter', 'url(#label-shadow)');
         const labelText = `${target.name} · ${formatMs(target.latency_avg)}`;
         const padX = 6, padY = 3, fontPx = 11;
         const approxW = labelText.length * fontPx * 0.58;
@@ -388,9 +425,10 @@ export default function DartChart({ data, onTargetClick, selectedGroup }: Props)
           .attr('width', approxW + padX * 2)
           .attr('height', fontPx + padY * 2)
           .attr('rx', 4)
-          .attr('fill', 'rgba(255,255,255,0.94)')
+          .attr('fill', 'rgba(255,255,255,0.85)')
           .attr('stroke', dotFill)
-          .attr('stroke-width', 1);
+          .attr('stroke-width', 0.8)
+          .attr('stroke-opacity', 0.6);
         lg.append('text')
           .attr('text-anchor', anchor)
           .attr('dominant-baseline', 'middle')

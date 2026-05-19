@@ -43,6 +43,9 @@ router.get('/dashboard', (_req: Request, res: Response) => {
         COUNT(*)         AS sample_count
       FROM measurements
       WHERE peer_id IS NULL
+        AND loss_pct < 100        -- exclude total-failure samples (prober stores latency_*=0)
+        AND latency_min IS NOT NULL
+        AND latency_min > 0
       GROUP BY target_id
     ) lt ON lt.target_id = t.id
     WHERE t.enabled = 1
