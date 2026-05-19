@@ -171,4 +171,12 @@ export const api = {
       body: JSON.stringify({ name, permissions }),
     }),
   deleteApiKey: (id: string) => request<void>(`/api-keys/${id}`, { method: 'DELETE' }),
+
+  // Instance-level settings (key/value), e.g. site_name
+  getSettings: () => request<Record<string, string | null>>('/settings'),
+  updateSettings: (patch: Record<string, string | null>) =>
+    request<Record<string, string | null>>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    }),
 };

@@ -136,6 +136,43 @@ router.delete('/api-keys/:id', (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+// Settings (key/value). Currently used for `site_name` — the local
+// instance label shown above the dashboard so peer instances can be
+// distinguished ("Europe Peer", "US", etc.).
+router.get('/settings', (_req: Request, res: Response) => {
+  const db = getDb();
+  const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string | null }>;
+  const out: Record<string, string | null> = {};
+  for (const r of rows) out[r.key] = r.value;
+  res.json(out);
+});
+
+router.put('/settings', (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+  if (!body || typeof body !== 'object') {
+    return res.status(400).json({ error: 'Body must be a JSON object of {key: value}' });
+  }
+  const db = getDb();
+  const upsert = db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES (?, ?, unixepoch())
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()
+  `);
+  const tx = db.transaction((entries: [string, string | null][]) => {
+    for (const [k, v] of entries) upsert.run(k, v);
+  });
+  const entries: [string, string | null][] = Object.entries(body).map(([k, v]) => [
+    k,
+    v == null ? null : String(v),
+  ]);
+  tx(entries);
+
+  const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string | null }>;
+  const out: Record<string, string | null> = {};
+  for (const r of rows) out[r.key] = r.value;
+  res.json(out);
+});
+
 // Health check
 router.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: Math.floor(Date.now() / 1000) });
