@@ -11,6 +11,10 @@ Network SLA monitoring tool with a dart/bullseye chart visualization, inspired b
 - **REST API** — Full CRUD API for integration with other tools.
 - **Distributed Probing** — Connect multiple instances via API keys to measure from different network locations.
 - **Docker Ready** — Single container with docker-compose support.
+<img width="1073" height="1107" alt="Bildschirmfoto_20260519_112510-1" src="https://github.com/user-attachments/assets/fc576ecb-c4ed-4533-9710-1473c78ed460" />
+<img width="1087" height="1112" alt="Bildschirmfoto_20260519_112852-1" src="https://github.com/user-attachments/assets/9068a252-d228-4d87-a27b-525a6832fb0a" />
+<img width="1088" height="683" alt="Bildschirmfoto_20260519_112924" src="https://github.com/user-attachments/assets/c4c25d06-e437-47e4-9f5f-0a10e4f2dd8e" />
+
 
 ## Quick Start
 
@@ -82,6 +86,9 @@ To measure from multiple locations:
 2. On each instance, create an API key with `write` permissions.
 3. On the central instance, go to /peers and add each remote probe with its URL and API key.
 4. Set direction to `push` (probes send data to central), `pull` (central fetches from probes), or `both`.
+
+<img width="1102" height="1059" alt="Bildschirmfoto_20260519_113114" src="https://github.com/user-attachments/assets/984dcb70-d0d0-43b5-81a8-95406f863e1e" />
+
 
 ## Architecture
 
