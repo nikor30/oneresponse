@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, type Peer, type ApiKey, type ApiKeyWithSecret } from '../api/client';
+import { api, type Peer, type ApiKey, type ApiKeyWithSecret, type PeerTestResult } from '../api/client';
 
 const emptyForm = { name: '', url: '', api_key: '' };
 
@@ -12,6 +12,25 @@ export default function PeerManager() {
   const [newKey, setNewKey] = useState<ApiKeyWithSecret | null>(null);
   const [newKeyName, setNewKeyName] = useState('');
   const [keyErr, setKeyErr] = useState('');
+  const [testing, setTesting] = useState<Record<string, boolean>>({});
+  const [testResults, setTestResults] = useState<Record<string, PeerTestResult>>({});
+
+  const testPeer = async (id: string) => {
+    setTesting(t => ({ ...t, [id]: true }));
+    try {
+      const result = await api.testPeer(id);
+      setTestResults(r => ({ ...r, [id]: result }));
+      // Refresh peers so the table reflects last_error / last_seen
+      loadPeers();
+    } catch (err) {
+      setTestResults(r => ({
+        ...r,
+        [id]: { ok: false, elapsed_ms: 0, url: '', error: (err as Error).message },
+      }));
+    } finally {
+      setTesting(t => ({ ...t, [id]: false }));
+    }
+  };
 
   const loadPeers = () => api.getPeers().then(setPeers).catch(e => setError(e.message));
   const loadKeys  = () => api.getApiKeys().then(setKeys).catch(e => setKeyErr(e.message));
@@ -178,26 +197,85 @@ export default function PeerManager() {
           <tr style={{ borderBottom: '2px solid var(--border)' }}>
             <th style={th}>Name</th>
             <th style={th}>URL</th>
-            <th style={{ ...th, textAlign: 'center' }}>Enabled</th>
+            <th style={{ ...th, textAlign: 'center' }}>Status</th>
             <th style={th}>Last Seen</th>
             <th style={{ ...th, textAlign: 'right' }}>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {peers.map(p => (
-            <tr key={p.id} style={{ borderBottom: '1px solid var(--border)' }}>
-              <td style={{ ...td, fontWeight: 600 }}>{p.name}</td>
-              <td style={{ ...td, fontFamily: 'monospace', fontSize: 12 }}>{p.url}</td>
-              <td style={{ ...td, textAlign: 'center' }}>{p.enabled ? 'Yes' : 'No'}</td>
-              <td style={{ ...td, color: 'var(--text-muted)' }}>
-                {p.last_seen ? new Date(p.last_seen * 1000).toLocaleString() : 'Never'}
-              </td>
-              <td style={{ ...td, textAlign: 'right' }}>
-                <button onClick={() => handleEdit(p)} style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)', marginRight: 4, fontSize: 12 }}>Edit</button>
-                <button onClick={() => handleDelete(p.id)} style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}>Delete</button>
-              </td>
-            </tr>
-          ))}
+          {peers.map(p => {
+            const result = testResults[p.id];
+            const hasError = !!p.last_error || (result && !result.ok);
+            return (
+              <React.Fragment key={p.id}>
+                <tr style={{ borderBottom: (result || p.last_error) ? 'none' : '1px solid var(--border)' }}>
+                  <td style={{ ...td, fontWeight: 600 }}>{p.name}</td>
+                  <td style={{ ...td, fontFamily: 'monospace', fontSize: 12 }}>{p.url}</td>
+                  <td style={{ ...td, textAlign: 'center' }}>
+                    {p.enabled ? (hasError ? (
+                      <span style={{ color: '#dc2626' }}>⚠ Error</span>
+                    ) : p.last_seen ? (
+                      <span style={{ color: '#16a34a' }}>✓ OK</span>
+                    ) : (
+                      <span style={{ color: 'var(--text-dim)' }}>Never tried</span>
+                    )) : (
+                      <span style={{ color: 'var(--text-dim)' }}>Disabled</span>
+                    )}
+                  </td>
+                  <td style={{ ...td, color: 'var(--text-muted)' }}>
+                    {p.last_seen ? new Date(p.last_seen * 1000).toLocaleString() : '—'}
+                  </td>
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    <button
+                      onClick={() => testPeer(p.id)}
+                      disabled={!!testing[p.id]}
+                      style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)', marginRight: 4, fontSize: 12, opacity: testing[p.id] ? 0.5 : 1 }}
+                    >
+                      {testing[p.id] ? 'Testing…' : 'Test'}
+                    </button>
+                    <button onClick={() => handleEdit(p)} style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)', marginRight: 4, fontSize: 12 }}>Edit</button>
+                    <button onClick={() => handleDelete(p.id)} style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}>Delete</button>
+                  </td>
+                </tr>
+                {(result || p.last_error) && (
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td colSpan={5} style={{ padding: '0 16px 12px 16px' }}>
+                      <div style={{
+                        background: hasError ? 'rgba(220,38,38,0.08)' : 'rgba(34,197,94,0.08)',
+                        border: `1px solid ${hasError ? 'rgba(220,38,38,0.35)' : 'rgba(34,197,94,0.35)'}`,
+                        color: hasError ? '#dc2626' : 'var(--text)',
+                        padding: '8px 12px',
+                        borderRadius: 6,
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                      }}>
+                        {result ? (
+                          result.ok ? (
+                            <>
+                              <strong>Test OK</strong> — reached <code style={inlineCode}>{result.url}</code> in {result.elapsed_ms} ms.
+                              {result.site_name && <> Peer reports site name: <strong>{result.site_name}</strong>.</>}
+                            </>
+                          ) : (
+                            <>
+                              <strong>Test failed{result.status ? ` (HTTP ${result.status})` : ''}</strong> — {result.error}
+                              {result.status === 401 && (
+                                <div style={{ marginTop: 4 }}>
+                                  This usually means the API key in this peer record was created on the wrong side.
+                                  The key must be generated on the <em>remote</em> node (the side being called) and pasted here.
+                                </div>
+                              )}
+                            </>
+                          )
+                        ) : (
+                          <><strong>Last dashboard refresh error:</strong> {p.last_error}</>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
           {peers.length === 0 && (
             <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>No peers configured.</td></tr>
           )}

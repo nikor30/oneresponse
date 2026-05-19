@@ -112,8 +112,12 @@ function getSiteName(): string {
 
 function checkApiKey(apiKey: string | undefined): { ok: boolean; permissions?: string } {
   if (!apiKey) return { ok: false };
+  // Trim defensively — copy-paste from the browser sometimes drags in
+  // leading/trailing whitespace which would silently break the hash match.
+  const trimmed = apiKey.trim();
+  if (!trimmed) return { ok: false };
   const db = getDb();
-  const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+  const keyHash = crypto.createHash('sha256').update(trimmed).digest('hex');
   const key = db.prepare('SELECT permissions FROM api_keys WHERE key_hash = ?').get(keyHash) as { permissions: string } | undefined;
   if (!key) return { ok: false };
   return { ok: true, permissions: key.permissions };
@@ -130,8 +134,19 @@ router.get('/dashboard', (_req: Request, res: Response) => {
 // the remote instance can label this pane.
 router.get('/peer-view', (req: Request, res: Response) => {
   const apiKey = req.headers['x-api-key'] as string | undefined;
+  if (!apiKey) {
+    return res.status(401).json({ error: 'Missing X-API-Key header' });
+  }
   const check = checkApiKey(apiKey);
-  if (!check.ok) return res.status(401).json({ error: 'X-API-Key header required or invalid' });
+  if (!check.ok) {
+    // Most common cause: the operator created the key on the wrong node.
+    // The key the caller is presenting must exist in THIS node's api_keys
+    // table — i.e. it must have been created on this side and given to
+    // the calling side.
+    return res.status(401).json({
+      error: 'API key not recognised on this node. The key must have been created here (the side being called), not on the caller. Visit /peers on this node to create one and paste it into the calling node\'s peer record.',
+    });
+  }
   res.json({
     site_name: getSiteName(),
     dashboard: computeLocalDashboard(),
@@ -162,14 +177,23 @@ router.get('/dashboard/aggregate', async (_req: Request, res: Response) => {
     try {
       const url = `${peer.url.replace(/\/$/, '')}/api/v1/peer-view`;
       const response = await fetch(url, {
-        headers: { 'X-API-Key': peer.api_key },
+        headers: { 'X-API-Key': (peer.api_key || '').trim() },
         signal: AbortSignal.timeout(5000),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        // Read the body if possible so the operator sees the peer's
+        // own error message, not just an opaque HTTP code.
+        let body: string | null = null;
+        try {
+          const j = await response.json() as { error?: string };
+          body = j?.error || null;
+        } catch { /* not JSON */ }
+        throw new Error(`HTTP ${response.status}${body ? ` — ${body}` : ''}`);
+      }
       const data = await response.json() as { site_name?: string; dashboard?: unknown; timestamp?: number };
-      // Best-effort last_seen update; ignore failures
       try {
-        db.prepare('UPDATE peers SET last_seen = ? WHERE id = ?').run(Math.floor(Date.now() / 1000), peer.id);
+        db.prepare('UPDATE peers SET last_seen = ?, last_error = NULL WHERE id = ?')
+          .run(Math.floor(Date.now() / 1000), peer.id);
       } catch { /* ignore */ }
       return {
         peer_id: peer.id,
@@ -181,6 +205,10 @@ router.get('/dashboard/aggregate', async (_req: Request, res: Response) => {
         error: null,
       };
     } catch (err) {
+      const message = (err as Error).message || 'fetch failed';
+      try {
+        db.prepare('UPDATE peers SET last_error = ? WHERE id = ?').run(message, peer.id);
+      } catch { /* ignore */ }
       return {
         peer_id: peer.id,
         peer_name: peer.name,
@@ -188,7 +216,7 @@ router.get('/dashboard/aggregate', async (_req: Request, res: Response) => {
         site_name: peer.name,
         dashboard: [],
         last_seen: null,
-        error: (err as Error).message || 'fetch failed',
+        error: message,
       };
     }
   }));
