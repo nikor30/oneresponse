@@ -16,6 +16,7 @@ interface MeasurementRow {
   loss_pct: number | null;
   probe_count: number | null;
   sla_score: number | null;
+  rtts: number[] | null;
 }
 
 interface TargetMetaRow {
@@ -36,6 +37,8 @@ function queryMeasurements(
   if (bucket > 0) {
     // Server-side downsampling: aggregate into time buckets so very long
     // ranges (7d/30d) stay performant and don't blow past the row limit.
+    // We drop individual rtts in bucketed mode — the SmokePing-style chart
+    // falls back to min/max range for the smoke band.
     return db.prepare(`
       SELECT
         0 AS id,
@@ -48,7 +51,8 @@ function queryMeasurements(
         AVG(jitter)      AS jitter,
         AVG(loss_pct)    AS loss_pct,
         SUM(probe_count) AS probe_count,
-        AVG(sla_score)   AS sla_score
+        AVG(sla_score)   AS sla_score,
+        NULL             AS rtts
       FROM measurements
       WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
       GROUP BY CAST(timestamp / ? AS INTEGER)
@@ -56,14 +60,28 @@ function queryMeasurements(
       LIMIT ?
     `).all(targetId, bucket, bucket, targetId, from, to, bucket, limit) as MeasurementRow[];
   }
-  return db.prepare(`
+  const rows = db.prepare(`
     SELECT id, target_id, peer_id, timestamp, latency_min, latency_avg, latency_max,
-           jitter, loss_pct, probe_count, sla_score
+           jitter, loss_pct, probe_count, sla_score, rtts
     FROM measurements
     WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
     ORDER BY timestamp ASC
     LIMIT ?
-  `).all(targetId, from, to, limit) as MeasurementRow[];
+  `).all(targetId, from, to, limit) as Array<Omit<MeasurementRow, 'rtts'> & { rtts: string | null }>;
+  // Parse rtts JSON into number[]
+  return rows.map(r => ({
+    ...r,
+    rtts: r.rtts ? safeParseRtts(r.rtts) : null,
+  }));
+}
+
+function safeParseRtts(s: string): number[] | null {
+  try {
+    const arr = JSON.parse(s);
+    return Array.isArray(arr) ? arr.filter(x => typeof x === 'number') : null;
+  } catch {
+    return null;
+  }
 }
 
 // Get measurements for a target (time series data)

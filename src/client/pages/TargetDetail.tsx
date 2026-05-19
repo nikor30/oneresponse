@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, type Target, type Measurement } from '../api/client';
-import TimeSeriesGraph from '../components/TimeSeriesGraph';
+import SmokePingGraph from '../components/SmokePingGraph';
 
 const TIME_RANGES = [
   { label: '1h', seconds: 3600 },
@@ -16,6 +16,19 @@ function bucketForRange(rangeSec: number): number {
   if (rangeSec <= 86400) return 0;       // ≤ 24h → raw points
   if (rangeSec <= 604800) return 1800;   // 7d → 30-min buckets (≈ 336)
   return 7200;                            // 30d → 2-hour buckets (≈ 360)
+}
+
+function rangeLabel(seconds: number): string {
+  const r = TIME_RANGES.find(x => x.seconds === seconds);
+  if (!r) return '';
+  switch (r.label) {
+    case '1h': return 'Last 1 Hour';
+    case '6h': return 'Last 6 Hours';
+    case '24h': return 'Last 24 Hours';
+    case '7d': return 'Last 7 Days';
+    case '30d': return 'Last 30 Days';
+    default: return `Last ${r.label}`;
+  }
 }
 
 export default function TargetDetail() {
@@ -105,11 +118,13 @@ export default function TargetDetail() {
             Loading…
           </div>
         )}
-        <TimeSeriesGraph
+        <SmokePingGraph
           measurements={measurements}
-          title={`${target.name} — Latency`}
+          title={`${target.name} — ${rangeLabel(range)}`}
           from={from}
           to={to}
+          probeCount={target.probe_count}
+          probeIntervalSec={target.probe_interval}
         />
       </div>
     </div>
