@@ -14,8 +14,8 @@ services:
     # sysctl `net.ipv4.ping_group_range` set so the running UID can open
     # an unprivileged ICMP socket. Setting the sysctl works on Docker and
     # rootful Podman without any extra capability.
-    sysctls:
-      - net.ipv4.ping_group_range=0 2147483647
+    # sysctls:
+    #  - net.ipv4.ping_group_range=0 2147483647
     # Belt-and-braces: also grant NET_RAW so older runtimes / kernels that
     # ignore the sysctl can still ping.
     cap_add:
