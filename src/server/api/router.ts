@@ -18,13 +18,16 @@ router.use('/peers', peersRouter);
 router.get('/dashboard', (_req: Request, res: Response) => {
   const db = getDb();
 
+  // Latest measurement + lifetime min/max range per target. The lifetime
+  // values feed the dart chart's permanent drift lines.
   const dashboard = db.prepare(`
     SELECT
       g.id as group_id, g.name as group_name,
       g.sla_latency_ms, g.sla_jitter_ms, g.sla_loss_pct,
       t.id as target_id, t.name as target_name, t.host, t.site_code,
       m.timestamp, m.latency_min, m.latency_avg, m.latency_max,
-      m.jitter, m.loss_pct, m.sla_score
+      m.jitter, m.loss_pct, m.sla_score,
+      lt.latency_min_lifetime, lt.latency_max_lifetime, lt.sample_count
     FROM targets t
     JOIN groups g ON t.group_id = g.id
     LEFT JOIN measurements m ON m.id = (
@@ -32,6 +35,16 @@ router.get('/dashboard', (_req: Request, res: Response) => {
       WHERE target_id = t.id AND peer_id IS NULL
       ORDER BY timestamp DESC LIMIT 1
     )
+    LEFT JOIN (
+      SELECT
+        target_id,
+        MIN(latency_min) AS latency_min_lifetime,
+        MAX(latency_max) AS latency_max_lifetime,
+        COUNT(*)         AS sample_count
+      FROM measurements
+      WHERE peer_id IS NULL
+      GROUP BY target_id
+    ) lt ON lt.target_id = t.id
     WHERE t.enabled = 1
     ORDER BY g.name, t.name
   `).all();
@@ -64,6 +77,9 @@ router.get('/dashboard', (_req: Request, res: Response) => {
       jitter: row.jitter,
       loss_pct: row.loss_pct,
       sla_score: row.sla_score,
+      latency_min_lifetime: row.latency_min_lifetime,
+      latency_max_lifetime: row.latency_max_lifetime,
+      sample_count: row.sample_count,
     });
   }
 
