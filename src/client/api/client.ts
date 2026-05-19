@@ -2,6 +2,7 @@ const BASE = '/api/v1';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
+    credentials: 'same-origin', // send the session cookie for protected routes
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   });
@@ -133,6 +134,12 @@ export interface ApiKeyWithSecret extends ApiKey {
   key: string;
 }
 
+export interface AuthStatus {
+  admin_required: boolean;
+  logged_in: boolean;
+  username: string | null;
+}
+
 // API calls
 export const api = {
   // Dashboard
@@ -217,5 +224,24 @@ export const api = {
     request<Record<string, string | null>>('/settings', {
       method: 'PUT',
       body: JSON.stringify(patch),
+    }),
+
+  // Auth
+  getAuthStatus: () => request<AuthStatus>('/auth/me'),
+  setupAdmin: (username: string, password: string) =>
+    request<{ ok: boolean; username: string }>('/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  login: (username: string, password: string) =>
+    request<{ ok: boolean; username: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+  logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST', body: '{}' }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ ok: boolean }>('/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify({ current_password, new_password }),
     }),
 };

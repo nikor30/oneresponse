@@ -6,10 +6,13 @@ import groupsRouter from './groups.js';
 import targetsRouter from './targets.js';
 import measurementsRouter from './measurements.js';
 import peersRouter from './peers.js';
+import authRouter from './auth.js';
 import { getStorageStats } from '../maintenance.js';
+import { requireAdmin } from '../auth.js';
 
 const router = Router();
 
+router.use('/auth', authRouter);
 router.use('/groups', groupsRouter);
 router.use('/targets', targetsRouter);
 router.use('/measurements', measurementsRouter);
@@ -227,7 +230,7 @@ router.get('/dashboard/aggregate', async (_req: Request, res: Response) => {
 // API key management. We always create keys with 'admin' permissions
 // (read + write) since the UI no longer asks the operator to pick — the
 // distinction was confusing for the common case of pairing two nodes.
-router.post('/api-keys', (req: Request, res: Response) => {
+router.post('/api-keys', requireAdmin, (req: Request, res: Response) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
@@ -250,7 +253,7 @@ router.get('/api-keys', (_req: Request, res: Response) => {
   res.json(keys);
 });
 
-router.delete('/api-keys/:id', (req: Request, res: Response) => {
+router.delete('/api-keys/:id', requireAdmin, (req: Request, res: Response) => {
   const db = getDb();
   const result = db.prepare('DELETE FROM api_keys WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'API key not found' });
@@ -260,15 +263,24 @@ router.delete('/api-keys/:id', (req: Request, res: Response) => {
 // Settings (key/value). Currently used for `site_name` — the local
 // instance label shown above the dashboard so peer instances can be
 // distinguished ("Europe Peer", "US", etc.).
+// Keys we never expose over the wire — credentials and other sensitive
+// values stay server-side.
+const SECRET_SETTING_KEYS = new Set([
+  'admin_password_hash',
+]);
+
 router.get('/settings', (_req: Request, res: Response) => {
   const db = getDb();
   const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string | null }>;
   const out: Record<string, string | null> = {};
-  for (const r of rows) out[r.key] = r.value;
+  for (const r of rows) {
+    if (SECRET_SETTING_KEYS.has(r.key)) continue;
+    out[r.key] = r.value;
+  }
   res.json(out);
 });
 
-router.put('/settings', (req: Request, res: Response) => {
+router.put('/settings', requireAdmin, (req: Request, res: Response) => {
   const body = req.body as Record<string, unknown>;
   if (!body || typeof body !== 'object') {
     return res.status(400).json({ error: 'Body must be a JSON object of {key: value}' });
@@ -280,7 +292,12 @@ router.put('/settings', (req: Request, res: Response) => {
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()
   `);
   const tx = db.transaction((entries: [string, string | null][]) => {
-    for (const [k, v] of entries) upsert.run(k, v);
+    for (const [k, v] of entries) {
+      // Block direct writes to secret keys via this generic endpoint.
+      // admin_password_hash must be set through /auth/setup or /auth/password.
+      if (SECRET_SETTING_KEYS.has(k)) continue;
+      upsert.run(k, v);
+    }
   });
   const entries: [string, string | null][] = Object.entries(body).map(([k, v]) => [
     k,
@@ -290,7 +307,10 @@ router.put('/settings', (req: Request, res: Response) => {
 
   const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string | null }>;
   const out: Record<string, string | null> = {};
-  for (const r of rows) out[r.key] = r.value;
+  for (const r of rows) {
+    if (SECRET_SETTING_KEYS.has(r.key)) continue;
+    out[r.key] = r.value;
+  }
   res.json(out);
 });
 

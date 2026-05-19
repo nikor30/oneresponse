@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb } from '../db/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import { requireAdmin } from '../auth.js';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get('/', (_req: Request, res: Response) => {
 // One-shot connectivity check — calls the peer's /peer-view ourselves and
 // surfaces the actual HTTP status + response body so the operator can see
 // exactly what's wrong (key not recognised, wrong URL, peer down, etc.).
-router.post('/:id/test', async (req: Request, res: Response) => {
+router.post('/:id/test', requireAdmin, async (req: Request, res: Response) => {
   const db = getDb();
   const peer = db.prepare('SELECT id, name, url, api_key FROM peers WHERE id = ?').get(req.params.id) as
     { id: string; name: string; url: string; api_key: string } | undefined;
@@ -77,7 +78,7 @@ router.post('/:id/test', async (req: Request, res: Response) => {
 
 // Peer direction is always 'both' now (the UI dropdown was confusing for
 // the common case). The column is kept for back-compat with existing rows.
-router.post('/', (req: Request, res: Response) => {
+router.post('/', requireAdmin, (req: Request, res: Response) => {
   const db = getDb();
   const { name, url, api_key } = req.body;
   if (!name || !url || !api_key) {
@@ -94,7 +95,7 @@ router.post('/', (req: Request, res: Response) => {
   res.status(201).json(peer);
 });
 
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', requireAdmin, (req: Request, res: Response) => {
   const db = getDb();
   const existing = db.prepare('SELECT * FROM peers WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
   if (!existing) return res.status(404).json({ error: 'Peer not found' });
@@ -115,7 +116,7 @@ router.put('/:id', (req: Request, res: Response) => {
   res.json(peer);
 });
 
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', requireAdmin, (req: Request, res: Response) => {
   const db = getDb();
   const result = db.prepare('DELETE FROM peers WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'Peer not found' });

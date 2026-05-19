@@ -6,24 +6,36 @@ import { api } from '../api/client';
 interface Props {
   open: boolean;
   onClose: () => void;
+  // Whether the viewer is allowed to edit admin-only pages. Guests get
+  // a stripped-down menu without targets/groups/peers/settings.
+  canEdit: boolean;
 }
 
-const NAV = [
-  { path: '/',        label: 'Dashboard',   icon: '◎' },
-  { path: '/top',     label: 'Top 10',      icon: '★' },
-  { path: '/targets', label: 'Targets',     icon: '🎯' },
-  { path: '/groups',  label: 'Groups & SLA',icon: '🗂' },
-  { path: '/peers',   label: 'Peers',       icon: '🌐' },
+const NAV_PUBLIC = [
+  { path: '/',    label: 'Dashboard', icon: '◎' },
+  { path: '/top', label: 'Top 10',    icon: '★' },
+];
+const NAV_ADMIN = [
+  { path: '/targets',  label: 'Targets',      icon: '🎯' },
+  { path: '/groups',   label: 'Groups & SLA', icon: '🗂' },
+  { path: '/peers',    label: 'Peers',        icon: '🌐' },
+  { path: '/settings', label: 'Settings',     icon: '⚙' },
 ];
 
-export default function SettingsDrawer({ open, onClose }: Props) {
+export default function SettingsDrawer({ open, onClose, canEdit }: Props) {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [err, setErr] = useState<string | null>(null);
   const [siteName, setSiteName] = useState<string>('');
   const [siteNameSaved, setSiteNameSaved] = useState<string>('');
   const [siteSaving, setSiteSaving] = useState(false);
-  const [showLabels, setShowLabels] = useState(true);
+  const [showLabels, setShowLabels] = useState(() => {
+    try {
+      const v = localStorage.getItem('oneresponse.show_target_labels');
+      if (v === 'false') return false;
+    } catch { /* ignore */ }
+    return true;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -32,7 +44,6 @@ export default function SettingsDrawer({ open, onClose }: Props) {
         const v = s.site_name || 'oneresponse';
         setSiteName(v);
         setSiteNameSaved(v);
-        setShowLabels(s.show_target_labels !== 'false');
       })
       .catch(() => { /* ignore */ });
   }, [open]);
@@ -52,16 +63,14 @@ export default function SettingsDrawer({ open, onClose }: Props) {
     }
   };
 
-  const toggleShowLabels = async () => {
+  // show_target_labels is per-browser (localStorage) so guests and
+  // admins alike can toggle it without affecting other viewers and
+  // without needing edit rights on the server.
+  const toggleShowLabels = () => {
     const next = !showLabels;
     setShowLabels(next);
-    try {
-      const updated = await api.updateSettings({ show_target_labels: next ? 'true' : 'false' });
-      window.dispatchEvent(new CustomEvent('oneresponse:settings-changed', { detail: updated }));
-    } catch (e) {
-      setErr((e as Error).message);
-      setShowLabels(!next);
-    }
+    try { localStorage.setItem('oneresponse.show_target_labels', next ? 'true' : 'false'); } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent('oneresponse:labels-changed', { detail: { show_target_labels: next } }));
   };
 
   // Close on Escape
@@ -111,7 +120,12 @@ export default function SettingsDrawer({ open, onClose }: Props) {
 
         <div style={{ padding: '14px 18px' }}>
           <SectionTitle>Navigation</SectionTitle>
-          {NAV.map(n => (
+          {NAV_PUBLIC.map(n => (
+            <NavRow key={n.path} onClick={() => { navigate(n.path); onClose(); }}>
+              <span style={{ marginRight: 10 }}>{n.icon}</span> {n.label}
+            </NavRow>
+          ))}
+          {canEdit && NAV_ADMIN.map(n => (
             <NavRow key={n.path} onClick={() => { navigate(n.path); onClose(); }}>
               <span style={{ marginRight: 10 }}>{n.icon}</span> {n.label}
             </NavRow>

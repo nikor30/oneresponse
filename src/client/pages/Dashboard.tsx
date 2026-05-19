@@ -7,17 +7,17 @@ import TargetDetailModal from '../components/TargetDetailModal';
 export default function Dashboard() {
   const [nodes, setNodes] = useState<DashboardNode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showLabels, setShowLabels] = useState(true);
+  const [showLabels, setShowLabels] = useState(() => {
+    try {
+      return localStorage.getItem('oneresponse.show_target_labels') !== 'false';
+    } catch { return true; }
+  });
   const [openTargetId, setOpenTargetId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
-      const [data, settings] = await Promise.all([
-        api.getDashboardAggregate(),
-        api.getSettings().catch(() => ({} as Record<string, string | null>)),
-      ]);
+      const data = await api.getDashboardAggregate();
       setNodes(data);
-      setShowLabels(settings.show_target_labels !== 'false');
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -31,17 +31,19 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Settings drawer dispatches this when site_name or show_target_labels changes
+  // Settings drawer dispatches these — site_name update or labels toggle.
   useEffect(() => {
-    const onSettings = (e: Event) => {
-      const detail = (e as CustomEvent<Record<string, string | null>>).detail;
-      if (detail && 'show_target_labels' in detail) {
-        setShowLabels(detail.show_target_labels !== 'false');
-      }
-      loadData();
+    const onSettings = () => loadData();
+    const onLabels = (e: Event) => {
+      const detail = (e as CustomEvent<{ show_target_labels?: boolean }>).detail;
+      if (detail?.show_target_labels != null) setShowLabels(detail.show_target_labels);
     };
     window.addEventListener('oneresponse:settings-changed', onSettings);
-    return () => window.removeEventListener('oneresponse:settings-changed', onSettings);
+    window.addEventListener('oneresponse:labels-changed', onLabels);
+    return () => {
+      window.removeEventListener('oneresponse:settings-changed', onSettings);
+      window.removeEventListener('oneresponse:labels-changed', onLabels);
+    };
   }, [loadData]);
 
   if (loading) {
