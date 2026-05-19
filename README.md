@@ -114,6 +114,39 @@ Environment variables:
 | `PORT` | `3000` | Server port |
 | `DB_PATH` | `./data/oneresponse.db` | SQLite database path |
 
+## Troubleshooting
+
+### Container can't ping anything (not even the gateway)
+
+`ping` needs two things inside a container:
+
+1. **Permission to open ICMP sockets** — either `CAP_NET_RAW`, or the kernel sysctl `net.ipv4.ping_group_range` set so the running UID can use unprivileged ICMP. The shipped `docker-compose.yml` sets both, so this is handled for Docker and rootful Podman out of the box.
+
+2. **A network driver that forwards ICMP** — this is where most container surprises happen:
+
+   | Runtime / network mode | ICMP egress | Notes |
+   |---|---|---|
+   | Docker default (`bridge`) | ✅ | Works out of the box |
+   | Rootful Podman (`bridge`) | ✅ | Works out of the box |
+   | **Rootless Podman (`slirp4netns`, default)** | ❌ | slirp4netns does NOT forward ICMP through its NAT. Pings will fail even with the cap + sysctl set. |
+   | Rootless Podman (`pasta`) | ✅ | Recommended for rootless. Podman 4.4+ |
+   | `--network=host` | ✅ | Easiest workaround on any runtime; container uses the host's network namespace directly |
+
+   **Fix for rootless Podman:** start the container with `--network=pasta` or `--network=host`. In the Podman GUI, set *Network mode* on the container.
+
+   ```bash
+   podman run --network=pasta -p 3000:3000 \
+     -v oneresponse-data:/app/data \
+     localhost/oneresponse:latest
+   ```
+
+You can verify ICMP works from inside the container with:
+```bash
+docker exec -it <container> ping -c 1 1.1.1.1
+# or
+podman exec -it <container> ping -c 1 1.1.1.1
+```
+
 ## License
 
 ISC

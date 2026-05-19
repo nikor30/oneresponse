@@ -8,6 +8,24 @@ services:
     environment:
       - PORT=3000
       - DB_PATH=/app/data/oneresponse.db
+    # ICMP support inside the container.
+    #
+    # `ping` needs either CAP_NET_RAW (raw ICMP sockets) or the kernel
+    # sysctl `net.ipv4.ping_group_range` set so the running UID can open
+    # an unprivileged ICMP socket. Setting the sysctl works on Docker and
+    # rootful Podman without any extra capability.
+    sysctls:
+      - net.ipv4.ping_group_range=0 2147483647
+    # Belt-and-braces: also grant NET_RAW so older runtimes / kernels that
+    # ignore the sysctl can still ping.
+    cap_add:
+      - NET_RAW
+    #
+    # Rootless Podman note: slirp4netns (Podman's default rootless
+    # network driver) does NOT forward ICMP through its NAT, so pings
+    # won't leave the container even with the sysctl + cap set. Run
+    # either with `--network=pasta` (Podman 4.4+) or `--network=host`,
+    # or use the rootful service. See README "Troubleshooting".
     restart: unless-stopped
 
 volumes:
