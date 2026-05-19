@@ -66,8 +66,8 @@ export default function Dashboard() {
         display: 'grid',
         gap: 24,
         gridTemplateColumns: nodes.length > 1
-          ? 'repeat(auto-fit, minmax(640px, 1fr))'
-          : 'minmax(0, 820px)',
+          ? 'repeat(auto-fit, minmax(700px, 1fr))'
+          : 'minmax(0, 900px)',
         justifyContent: 'center',
         justifyItems: 'center',
       }}>
@@ -118,7 +118,7 @@ function NodePane({
   );
 
   return (
-    <div style={{ width: '100%', maxWidth: 820 }}>
+    <div style={{ width: '100%', maxWidth: 900 }}>
       <div style={{
         textAlign: 'center',
         marginBottom: 8,
