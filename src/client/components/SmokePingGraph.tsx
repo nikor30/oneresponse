@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import type { Measurement } from '../api/client';
+import { useTheme } from '../theme/ThemeContext';
+
+function cssVar(name: string, fallback = ''): string {
+  if (typeof document === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
 
 // SmokePing-style latency + packet-loss visualization.
 //
@@ -81,6 +88,7 @@ export default function SmokePingGraph({
   const overlayRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(900);
+  const { theme } = useTheme();
 
   // Responsive width
   useEffect(() => {
@@ -142,6 +150,14 @@ export default function SmokePingGraph({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
+    // Read theme colors at draw time so the chart re-styles when the user
+    // toggles light/dark (theme is in the effect deps).
+    const plotBg     = cssVar('--bg-card', '#ffffff');
+    const gridStroke = cssVar('--border',  '#e5e7eb');
+    const tickFill   = cssVar('--text-muted', 'var(--text-muted)');
+    const frameStroke= cssVar('--text',   'var(--text-muted)');
+    const titleFill  = cssVar('--text',   'var(--text)');
+
     const xScale = d3.scaleTime()
       .domain([new Date(from * 1000), new Date(to * 1000)])
       .range([margin.left, margin.left + plotW]);
@@ -150,15 +166,15 @@ export default function SmokePingGraph({
       .range([margin.top + plotH, margin.top]);
 
     // Plot background
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = plotBg;
     ctx.fillRect(margin.left, margin.top, plotW, plotH);
 
     // Grid lines (y)
     const yTicks = yScale.ticks(6);
-    ctx.strokeStyle = '#e5e7eb';
+    ctx.strokeStyle = gridStroke;
     ctx.lineWidth = 1;
     ctx.font = '11px system-ui, -apple-system, sans-serif';
-    ctx.fillStyle = '#475569';
+    ctx.fillStyle = tickFill;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     yTicks.forEach(t => {
@@ -246,7 +262,7 @@ export default function SmokePingGraph({
     }
 
     // Plot frame
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = frameStroke;
     ctx.lineWidth = 1;
     ctx.strokeRect(margin.left, margin.top, plotW, plotH);
 
@@ -254,7 +270,7 @@ export default function SmokePingGraph({
     ctx.save();
     ctx.translate(14, margin.top + plotH / 2);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillStyle = '#475569';
+    ctx.fillStyle = tickFill;
     ctx.font = '11px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('Seconds (RTT)', 0, 0);
@@ -262,7 +278,7 @@ export default function SmokePingGraph({
 
     // Title
     if (title) {
-      ctx.fillStyle = '#0f172a';
+      ctx.fillStyle = titleFill;
       ctx.font = '600 13px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
@@ -283,9 +299,9 @@ export default function SmokePingGraph({
       .tickSize(4)
       .tickPadding(6);
     xAxisG.call(xAxis);
-    xAxisG.selectAll('path,line').attr('stroke', '#334155');
-    xAxisG.selectAll('text').attr('fill', '#475569').attr('font-size', 11);
-  }, [sorted, from, to, width, plotW, plotH, margin.left, margin.right, margin.top, margin.bottom, yMax, title, probeIntervalSec, probeCount]);
+    xAxisG.selectAll('path,line').attr('stroke', frameStroke);
+    xAxisG.selectAll('text').attr('fill', tickFill).attr('font-size', 11);
+  }, [sorted, from, to, width, plotW, plotH, margin.left, margin.right, margin.top, margin.bottom, yMax, title, probeIntervalSec, probeCount, theme]);
 
   // Compute display loss legend
   const lossSwatches = LOSS_COLORS;
@@ -303,7 +319,7 @@ export default function SmokePingGraph({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#94a3b8',
+            color: 'var(--text-dim)',
             fontSize: 13,
           }}>
             No measurement data in this time range yet.
@@ -312,7 +328,7 @@ export default function SmokePingGraph({
       </div>
 
       {/* Stats footer */}
-      <div style={{ fontSize: 12, color: '#334155', marginTop: 10, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18 }}>
           <Stat label="median rtt" value={formatMs(stats.median)} />
           <Stat label="avg" value={formatMs(stats.avg)} />
@@ -323,7 +339,7 @@ export default function SmokePingGraph({
           <Stat label="loss" value={`${stats.lossPct.toFixed(2)} %`} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
-          <span style={{ color: '#475569' }}>loss color:</span>
+          <span style={{ color: 'var(--text-muted)' }}>loss color:</span>
           {lossSwatches.map(b => (
             <span key={b.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <span style={{
@@ -333,7 +349,7 @@ export default function SmokePingGraph({
                 border: '1px solid #cbd5e1',
                 borderRadius: 2,
               }} />
-              <span style={{ fontSize: 11, color: '#475569' }}>{b.label}</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{b.label}</span>
             </span>
           ))}
         </div>
@@ -349,7 +365,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <span>
       <span style={{ color: '#64748b' }}>{label}:</span>{' '}
-      <span style={{ color: '#0f172a', fontWeight: 600 }}>{value}</span>
+      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{value}</span>
     </span>
   );
 }
