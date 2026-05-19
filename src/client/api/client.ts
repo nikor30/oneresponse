@@ -87,6 +87,18 @@ export interface Peer {
   created_at: number;
 }
 
+export interface ApiKey {
+  id: string;
+  name: string;
+  permissions: string;
+  created_at: number;
+}
+
+export interface ApiKeyWithSecret extends ApiKey {
+  // Only returned at creation time
+  key: string;
+}
+
 // API calls
 export const api = {
   // Dashboard
@@ -150,4 +162,13 @@ export const api = {
   updatePeer: (id: string, data: Partial<Peer & { api_key: string }>) =>
     request<Peer>(`/peers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePeer: (id: string) => request<void>(`/peers/${id}`, { method: 'DELETE' }),
+
+  // API keys (for granting other oneresponse nodes / peers access to this node)
+  getApiKeys: () => request<ApiKey[]>('/api-keys'),
+  createApiKey: (name: string, permissions: 'read' | 'write' = 'read') =>
+    request<ApiKeyWithSecret>('/api-keys', {
+      method: 'POST',
+      body: JSON.stringify({ name, permissions }),
+    }),
+  deleteApiKey: (id: string) => request<void>(`/api-keys/${id}`, { method: 'DELETE' }),
 };
