@@ -1,7 +1,41 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import dns from 'dns/promises';
+import { getDb } from '../db/index.js';
 
 const execAsync = promisify(exec);
+
+// Custom DNS resolver. When the operator sets a `dns_server` setting we
+// use it to resolve target hostnames before passing the IP to /bin/ping
+// (the ping command itself reads /etc/resolv.conf, so we can't change
+// its resolver without root). Refresh on every probe so changes via
+// /api/v1/settings take effect immediately.
+function resolveTargetHost(host: string): Promise<string> {
+  // Plain IPv4 / IPv6 — nothing to resolve
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || /:[0-9a-f]/i.test(host)) {
+    return Promise.resolve(host);
+  }
+
+  const db = getDb();
+  const customServer = (db.prepare("SELECT value FROM settings WHERE key = 'dns_server'").get() as { value: string | null } | undefined)?.value || null;
+  const searchDomain = (db.prepare("SELECT value FROM settings WHERE key = 'search_domain'").get() as { value: string | null } | undefined)?.value || null;
+
+  // Append the search domain to short hostnames (no dot)
+  let lookupHost = host;
+  if (searchDomain && !host.includes('.')) {
+    lookupHost = `${host}.${searchDomain.replace(/^\./, '')}`;
+  }
+
+  if (!customServer) {
+    return Promise.resolve(lookupHost);
+  }
+
+  const resolver = new dns.Resolver();
+  resolver.setServers([customServer]);
+  return resolver.resolve4(lookupHost)
+    .then(addrs => addrs[0] || lookupHost)
+    .catch(() => lookupHost); // fall through; let ping fail with its own error
+}
 
 export interface ProbeResult {
   rtts: number[];
@@ -29,7 +63,8 @@ function stddev(values: number[]): number {
 }
 
 export async function probe(host: string, count: number = 20, timeout: number = 5): Promise<ProbeResult> {
-  const cmd = `ping -c ${count} -W ${timeout} ${host}`;
+  const resolved = await resolveTargetHost(host);
+  const cmd = `ping -c ${count} -W ${timeout} ${resolved}`;
 
   try {
     const { stdout } = await execAsync(cmd, { timeout: (count * timeout + 10) * 1000 });

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { getDb } from '../db/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import { toCsv, parseCsv } from '../util/csv.js';
+import { requireAdmin } from '../auth.js';
 
 const router = Router();
 
@@ -26,7 +27,7 @@ router.get('/export.csv', (_req: Request, res: Response) => {
   res.send(csv);
 });
 
-router.post('/import', (req: Request, res: Response) => {
+router.post('/import', requireAdmin, (req: Request, res: Response) => {
   const csvText = typeof req.body === 'string' ? req.body : '';
   if (!csvText) return res.status(400).json({ error: 'Request body must be CSV text (Content-Type: text/csv)' });
 
@@ -128,7 +129,7 @@ router.get('/:id', (req: Request, res: Response) => {
   res.json(target);
 });
 
-router.post('/', (req: Request, res: Response) => {
+router.post('/', requireAdmin, (req: Request, res: Response) => {
   const db = getDb();
   const { group_id, name, host, site_code, probe_interval, probe_count, enabled } = req.body;
   if (!group_id || !name || !host) {
@@ -148,7 +149,7 @@ router.post('/', (req: Request, res: Response) => {
   res.status(201).json(target);
 });
 
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', requireAdmin, (req: Request, res: Response) => {
   const db = getDb();
   const existing = db.prepare('SELECT * FROM targets WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
   if (!existing) return res.status(404).json({ error: 'Target not found' });
@@ -172,7 +173,7 @@ router.put('/:id', (req: Request, res: Response) => {
   res.json(target);
 });
 
-router.delete('/:id', (req: Request, res: Response) => {
+router.delete('/:id', requireAdmin, (req: Request, res: Response) => {
   const db = getDb();
   const result = db.prepare('DELETE FROM targets WHERE id = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'Target not found' });

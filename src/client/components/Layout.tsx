@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import SettingsDrawer from './SettingsDrawer';
+import LoginModal from './LoginModal';
+import { useAuth } from '../auth/AuthContext';
 
 const styles = {
   header: {
@@ -17,6 +19,11 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: 24,
+  } as React.CSSProperties,
+  right: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
   } as React.CSSProperties,
   logo: {
     fontSize: 20,
@@ -46,6 +53,22 @@ const styles = {
     alignItems: 'center',
     gap: 8,
   } as React.CSSProperties,
+  authBtn: {
+    background: 'transparent',
+    border: '1px solid rgba(255,255,255,0.15)',
+    color: '#ccc',
+    padding: '6px 12px',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontSize: 13,
+  } as React.CSSProperties,
+  userChip: {
+    color: '#ccc',
+    fontSize: 13,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+  } as React.CSSProperties,
   main: {
     padding: 24,
     maxWidth: 1400,
@@ -56,6 +79,10 @@ const styles = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const { status, logout, canEdit } = useAuth();
+
+  const isFirstRun = !status.admin_required; // no admin yet, "open mode"
 
   return (
     <>
@@ -66,17 +93,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             Dashboard
           </Link>
         </div>
-        <button
-          aria-label="Open menu"
-          onClick={() => setDrawerOpen(true)}
-          style={styles.burger}
-        >
-          <BurgerIcon />
-          <span style={{ fontSize: 13, fontWeight: 500 }}>Menu</span>
-        </button>
+        <div style={styles.right}>
+          {status.logged_in ? (
+            <>
+              <span style={styles.userChip}>👤 {status.username}</span>
+              <button onClick={logout} style={styles.authBtn}>Sign out</button>
+            </>
+          ) : (
+            <button onClick={() => setLoginOpen(true)} style={styles.authBtn}>
+              {isFirstRun ? 'Create admin' : 'Sign in'}
+            </button>
+          )}
+          <button
+            aria-label="Open menu"
+            onClick={() => setDrawerOpen(true)}
+            style={styles.burger}
+          >
+            <BurgerIcon />
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Menu</span>
+          </button>
+        </div>
       </header>
       <main style={styles.main}>{children}</main>
-      <SettingsDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <SettingsDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} canEdit={canEdit} />
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        setupMode={isFirstRun}
+      />
     </>
   );
 }

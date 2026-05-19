@@ -80,6 +80,14 @@ CREATE TABLE IF NOT EXISTS target_stats (
   updated_at INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
 INSERT OR IGNORE INTO settings (key, value) VALUES ('site_name', 'oneresponse');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_raw_days', '90');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_rtts_days', '7');

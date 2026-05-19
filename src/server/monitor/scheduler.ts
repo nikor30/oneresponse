@@ -3,6 +3,7 @@ import { probe } from './prober.js';
 import { calculateSlaScore } from './scoring.js';
 import { v4 as uuidv4 } from 'uuid';
 import { pushToPeers } from '../peer/client.js';
+import { noteProbe } from '../syslog.js';
 
 interface Target {
   id: string;
@@ -60,6 +61,24 @@ async function probeTarget(target: Target): Promise<void> {
       rtts: result.rtts,
       sla_score: slaScore,
     });
+
+    // Emit syslog alarm on SLA state transitions (compliant ↔ breached).
+    // Best-effort: never let syslog problems break probing.
+    try {
+      const groupRow = db.prepare('SELECT name FROM groups WHERE id = ?').get(target.group_id) as { name: string } | undefined;
+      noteProbe({
+        target_id: target.id,
+        target_name: target.name,
+        target_host: target.host,
+        group_name: groupRow?.name || '',
+        sla_score: slaScore,
+        latency_avg: result.latency_avg,
+        loss_pct: result.loss_pct,
+      });
+    } catch (e) {
+      // swallow — syslog is non-essential to the probe itself
+      void e;
+    }
   } catch (err) {
     console.error(`Probe failed for ${target.host}:`, err);
   }
