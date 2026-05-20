@@ -46,41 +46,32 @@ export const RTT_MON_LATEST_RTT_OPER_SENSE           = '1.3.6.1.4.1.9.9.42.1.2.1
 
 // ── rttMonLatestJitterOperTable: 1.3.6.1.4.1.9.9.42.1.5.2 ───────────
 // Latest result for udp-jitter operations.
-//   col 1  = rttMonLatestJitterOperNumOfRTT
-//   col 2  = rttMonLatestJitterOperRTTSum
-//   col 5  = rttMonLatestJitterOperRTTMin           (ms)
-//   col 6  = rttMonLatestJitterOperRTTMax           (ms)
-//   col 7  = rttMonLatestJitterOperMinOfPositivesSD
-//   col 8  = rttMonLatestJitterOperMaxOfPositivesSD
-//   col 9  = rttMonLatestJitterOperNumOfPositivesSD
-//   col 10 = rttMonLatestJitterOperSumOfPositivesSD
-//   col 13 = rttMonLatestJitterOperMinOfNegativesSD
-//   col 14 = rttMonLatestJitterOperMaxOfNegativesSD
-//   col 15 = rttMonLatestJitterOperNumOfNegativesSD
-//   col 16 = rttMonLatestJitterOperSumOfNegativesSD
-//   col 19 = rttMonLatestJitterOperMinOfPositivesDS
-//   col 20 = rttMonLatestJitterOperMaxOfPositivesDS
-//   col 21 = rttMonLatestJitterOperNumOfPositivesDS
-//   col 22 = rttMonLatestJitterOperSumOfPositivesDS
-//   col 25 = rttMonLatestJitterOperMinOfNegativesDS
-//   col 26 = rttMonLatestJitterOperMaxOfNegativesDS
-//   col 27 = rttMonLatestJitterOperNumOfNegativesDS
-//   col 28 = rttMonLatestJitterOperSumOfNegativesDS
-//   col 26 = rttMonLatestJitterOperPacketLossSD     (see note*)
-//   col 27 = rttMonLatestJitterOperPacketLossDS     (see note*)
-//   col 28 = rttMonLatestJitterOperPacketMIA        (see note*)
-//   col 29 = rttMonLatestJitterOperPacketLateArrival
-//   col 30 = rttMonLatestJitterOperPacketOutOfSequence
-//   col 31 = rttMonLatestJitterOperSense
-//   col 42 = rttMonLatestJitterOperMOS              (* 100 — divide by 100 for the score)
 //
-// NOTE on columns 26-30: Cisco renumbered some columns between MIB
-// revisions to add IPv6 variants. The collector reads the values from
-// the names below; if a particular IOS releases reports nothing at
-// those OIDs we fall back to a zero loss rather than fail the probe.
-// (Where deployments still report odd results, set logging to debug
-// and adjust the indices in this file rather than scattering OIDs
-// across the codebase.)
+// Column layout per the current CISCO-RTTMON-MIB
+// (verified against ios-xe 17.x MIB bundle and Cisco's published MIB
+// browser). The mistake to avoid: columns 1-30 are the per-direction
+// jitter sample counters (positives/negatives, SD/DS, min/max/num/sum/
+// sum-squared). The packet-loss / sense fields start at column 31.
+//
+//   col 1  = NumOfRTT
+//   col 2  = RTTSum
+//   col 5  = RTTMin                     (ms)
+//   col 6  = RTTMax                     (ms)
+//   col 9  = NumOfPositivesSD
+//   col 10 = SumOfPositivesSD
+//   col 15 = NumOfNegativesSD
+//   col 16 = SumOfNegativesSD
+//   col 21 = NumOfPositivesDS
+//   col 22 = SumOfPositivesDS
+//   col 27 = NumOfNegativesDS
+//   col 28 = SumOfNegativesDS
+//   col 31 = PacketLossSD               (source-to-destination loss)
+//   col 32 = PacketLossDS               (destination-to-source loss)
+//   col 33 = PacketOutOfSequence
+//   col 34 = PacketMIA                  (missing in action)
+//   col 35 = PacketLateArrival
+//   col 36 = Sense                      (operation result enum, see SENSE_OK)
+//   col 42 = MOS                        (× 100 — divide by 100 to get score)
 export const RTT_MON_LATEST_JITTER_NUM_RTT     = '1.3.6.1.4.1.9.9.42.1.5.2.1.1';
 export const RTT_MON_LATEST_JITTER_RTT_SUM     = '1.3.6.1.4.1.9.9.42.1.5.2.1.2';
 export const RTT_MON_LATEST_JITTER_RTT_MIN     = '1.3.6.1.4.1.9.9.42.1.5.2.1.5';
@@ -93,11 +84,11 @@ export const RTT_MON_LATEST_JITTER_NUM_POS_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.21'
 export const RTT_MON_LATEST_JITTER_SUM_POS_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.22';
 export const RTT_MON_LATEST_JITTER_NUM_NEG_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.27';
 export const RTT_MON_LATEST_JITTER_SUM_NEG_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.28';
-export const RTT_MON_LATEST_JITTER_LOSS_SD     = '1.3.6.1.4.1.9.9.42.1.5.2.1.26';
-export const RTT_MON_LATEST_JITTER_LOSS_DS     = '1.3.6.1.4.1.9.9.42.1.5.2.1.27';
-export const RTT_MON_LATEST_JITTER_MIA         = '1.3.6.1.4.1.9.9.42.1.5.2.1.28';
-export const RTT_MON_LATEST_JITTER_OOS         = '1.3.6.1.4.1.9.9.42.1.5.2.1.30';
-export const RTT_MON_LATEST_JITTER_SENSE       = '1.3.6.1.4.1.9.9.42.1.5.2.1.31';
+export const RTT_MON_LATEST_JITTER_LOSS_SD     = '1.3.6.1.4.1.9.9.42.1.5.2.1.31';
+export const RTT_MON_LATEST_JITTER_LOSS_DS     = '1.3.6.1.4.1.9.9.42.1.5.2.1.32';
+export const RTT_MON_LATEST_JITTER_OOS         = '1.3.6.1.4.1.9.9.42.1.5.2.1.33';
+export const RTT_MON_LATEST_JITTER_MIA         = '1.3.6.1.4.1.9.9.42.1.5.2.1.34';
+export const RTT_MON_LATEST_JITTER_SENSE       = '1.3.6.1.4.1.9.9.42.1.5.2.1.36';
 export const RTT_MON_LATEST_JITTER_MOS         = '1.3.6.1.4.1.9.9.42.1.5.2.1.42';
 
 // ── Enums ──────────────────────────────────────────────────────────
