@@ -8,7 +8,21 @@ import {
   type DiscoveredOperation,
 } from '../monitor/cisco/collector.js';
 import { encryptSecret, decryptSecret } from '../monitor/cisco/secret.js';
-import type { CiscoDeviceConn } from '../monitor/cisco/snmp.js';
+import { snmpGet, type CiscoDeviceConn } from '../monitor/cisco/snmp.js';
+import {
+  RTT_MON_LATEST_RTT_OPER_COMPLETION_TIME,
+  RTT_MON_LATEST_RTT_OPER_SENSE,
+  RTT_MON_LATEST_JITTER_NUM_RTT,
+  RTT_MON_LATEST_JITTER_RTT_SUM,
+  RTT_MON_LATEST_JITTER_RTT_MIN,
+  RTT_MON_LATEST_JITTER_RTT_MAX,
+  RTT_MON_LATEST_JITTER_LOSS_SD,
+  RTT_MON_LATEST_JITTER_LOSS_DS,
+  RTT_MON_LATEST_JITTER_OOS,
+  RTT_MON_LATEST_JITTER_MIA,
+  RTT_MON_LATEST_JITTER_SENSE,
+  RTT_MON_LATEST_JITTER_MOS,
+} from '../monitor/cisco/mibConstants.js';
 
 const router = Router();
 
@@ -165,6 +179,50 @@ router.get('/:id/operations', requireAdmin, async (req: Request, res: Response) 
   try {
     const ops = await ciscoDiscoverOperations(rowToConn(existing));
     res.json(ops);
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+// Debug endpoint — fetch the raw varbinds the collector would read for
+// a given operation, with the human-readable column names alongside.
+// Returns { kind, varbinds: [{name, oid, value}] } so the operator can
+// see at a glance whether the device reports nothing (column mismatch),
+// a non-OK sense (probe failing), or values that look right (collector
+// or normalisation bug).
+router.get('/:id/inspect/:operIndex', requireAdmin, async (req: Request, res: Response) => {
+  const existing = loadDeviceOr404(String(req.params.id), res); if (!existing) return;
+  const operIndex = parseInt(String(req.params.operIndex), 10);
+  if (!Number.isFinite(operIndex)) return res.status(400).json({ error: 'operIndex must be an integer' });
+  const kind = (req.query.kind as string | undefined) || 'udp-jitter';
+
+  const named: { name: string; oid: string }[] = kind === 'udp-jitter'
+    ? [
+        { name: 'numRtt',  oid: RTT_MON_LATEST_JITTER_NUM_RTT },
+        { name: 'rttSum',  oid: RTT_MON_LATEST_JITTER_RTT_SUM },
+        { name: 'rttMin',  oid: RTT_MON_LATEST_JITTER_RTT_MIN },
+        { name: 'rttMax',  oid: RTT_MON_LATEST_JITTER_RTT_MAX },
+        { name: 'lossSd',  oid: RTT_MON_LATEST_JITTER_LOSS_SD },
+        { name: 'lossDs',  oid: RTT_MON_LATEST_JITTER_LOSS_DS },
+        { name: 'oos',     oid: RTT_MON_LATEST_JITTER_OOS },
+        { name: 'mia',     oid: RTT_MON_LATEST_JITTER_MIA },
+        { name: 'sense',   oid: RTT_MON_LATEST_JITTER_SENSE },
+        { name: 'mos',     oid: RTT_MON_LATEST_JITTER_MOS },
+      ]
+    : [
+        { name: 'completionTime', oid: RTT_MON_LATEST_RTT_OPER_COMPLETION_TIME },
+        { name: 'sense',          oid: RTT_MON_LATEST_RTT_OPER_SENSE },
+      ];
+
+  try {
+    const oids = named.map(n => `${n.oid}.${operIndex}`);
+    const vbs = await snmpGet(rowToConn(existing), oids);
+    const varbinds = named.map((n, i) => ({
+      name: n.name,
+      oid: oids[i],
+      value: vbs[i]?.value ?? null,
+    }));
+    res.json({ kind, operIndex, varbinds });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });
   }

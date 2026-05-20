@@ -80,7 +80,16 @@ export async function snmpGet(d: CiscoDeviceConn, oids: string[]): Promise<SnmpV
     session.get(oids, (err: Error | null, varbinds: SnmpVarbind[]) => {
       session.close();
       if (err) return reject(err);
-      resolve(varbinds);
+      // Replace noSuchObject / noSuchInstance / endOfMibView responses
+      // with a null-valued varbind so the caller can treat them as
+      // "value missing" without having to know about SNMP error types.
+      // (Older / newer MIB revisions move columns around; we tolerate
+      // missing leaves rather than failing the whole probe.)
+      const cleaned = (varbinds || []).map(vb => {
+        if (snmp.isVarbindError(vb)) return { oid: vb.oid, type: 5, value: null };
+        return vb;
+      });
+      resolve(cleaned);
     });
   });
 }
