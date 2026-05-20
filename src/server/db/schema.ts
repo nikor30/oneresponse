@@ -11,6 +11,25 @@ CREATE TABLE IF NOT EXISTS groups (
   created_at INTEGER DEFAULT (unixepoch())
 );
 
+CREATE TABLE IF NOT EXISTS cisco_devices (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  host TEXT NOT NULL,
+  snmp_port INTEGER DEFAULT 161,
+  snmp_version TEXT NOT NULL DEFAULT '2c',
+  community TEXT,
+  v3_username TEXT,
+  v3_auth_protocol TEXT,
+  v3_auth_password TEXT,
+  v3_priv_protocol TEXT,
+  v3_priv_password TEXT,
+  poll_interval_seconds INTEGER DEFAULT 60,
+  enabled INTEGER DEFAULT 1,
+  last_seen INTEGER,
+  last_error TEXT,
+  created_at INTEGER DEFAULT (unixepoch())
+);
+
 CREATE TABLE IF NOT EXISTS targets (
   id TEXT PRIMARY KEY,
   group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -20,6 +39,10 @@ CREATE TABLE IF NOT EXISTS targets (
   probe_interval INTEGER DEFAULT 300,
   probe_count INTEGER DEFAULT 20,
   enabled INTEGER DEFAULT 1,
+  probe_type TEXT NOT NULL DEFAULT 'icmp',
+  device_id TEXT REFERENCES cisco_devices(id) ON DELETE SET NULL,
+  ipsla_oper_index INTEGER,
+  ipsla_oper_type TEXT,
   created_at INTEGER DEFAULT (unixepoch())
 );
 
@@ -35,7 +58,9 @@ CREATE TABLE IF NOT EXISTS measurements (
   loss_pct REAL,
   probe_count INTEGER,
   rtts TEXT,
-  sla_score REAL
+  sla_score REAL,
+  mos REAL,
+  source TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_measurements_target_ts

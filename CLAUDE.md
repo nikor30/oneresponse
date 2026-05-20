@@ -44,8 +44,9 @@ docker compose up --build     # Rebuild and run
 - `db/` — SQLite schema (groups, targets, measurements, peers, api_keys) and connection management
 - `api/` — REST routes: `groups.ts`, `targets.ts`, `measurements.ts`, `peers.ts`, `router.ts` (also handles `/dashboard` and `/api-keys`)
 - `monitor/prober.ts` — Executes `ping -c <count>` and parses output for RTTs, loss, jitter
-- `monitor/scheduler.ts` — Loads enabled targets, groups by interval, runs probes concurrently
+- `monitor/scheduler.ts` — Loads enabled targets, dispatches them based on `probe_type`: ICMP targets to `prober.ts`, Cisco-IP-SLA targets to the collector below. Cisco targets are grouped by device so one SNMP session per cycle covers all operations on that device.
 - `monitor/scoring.ts` — SLA score: weighted combination of latency (40%), jitter (30%), loss (30%) vs group thresholds
+- `monitor/cisco/` — Cisco IP SLA collector. `mibConstants.ts` lists every numeric OID we read with citations back to CISCO-RTTMON-MIB; `snmp.ts` wraps `net-snmp`; `collector.ts` exposes `testConnection`, `discoverOperations`, `pollOperation`, `pollAllOperations` plus pure `normaliseEcho` / `normaliseJitter` functions (unit-tested in `collector.test.ts`); `secret.ts` encrypts SNMP credentials at rest with `ONERESPONSE_SECRET_KEY`.
 - `peer/` — Push measurements to remote peers (`client.ts`), pull from peers (`server.ts`)
 
 ### Frontend (`src/client/`)

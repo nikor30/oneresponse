@@ -6,6 +6,7 @@ import TargetDetail from './pages/TargetDetail';
 import TargetManager from './pages/TargetManager';
 import GroupManager from './pages/GroupManager';
 import PeerManager from './pages/PeerManager';
+import DeviceManager from './pages/DeviceManager';
 import Top10Page from './pages/Top10';
 import SettingsPage from './pages/Settings';
 import AdminGate from './components/AdminGate';
@@ -25,6 +26,7 @@ export default function App() {
               <Route path="/targets" element={<AdminGate what="targets"><TargetManager /></AdminGate>} />
               <Route path="/groups"  element={<AdminGate what="groups & SLA"><GroupManager /></AdminGate>} />
               <Route path="/peers"   element={<AdminGate what="peers and API keys"><PeerManager /></AdminGate>} />
+              <Route path="/devices" element={<AdminGate what="Cisco devices"><DeviceManager /></AdminGate>} />
               <Route path="/settings" element={<AdminGate what="instance settings"><SettingsPage /></AdminGate>} />
             </Routes>
           </Layout>

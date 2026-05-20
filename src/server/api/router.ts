@@ -7,6 +7,7 @@ import targetsRouter from './targets.js';
 import measurementsRouter from './measurements.js';
 import peersRouter from './peers.js';
 import authRouter from './auth.js';
+import devicesRouter from './devices.js';
 import { getStorageStats } from '../maintenance.js';
 import { requireAdmin } from '../auth.js';
 
@@ -17,6 +18,7 @@ router.use('/groups', groupsRouter);
 router.use('/targets', targetsRouter);
 router.use('/measurements', measurementsRouter);
 router.use('/peers', peersRouter);
+router.use('/devices', devicesRouter);
 
 interface DashboardRow {
   group_id: string;

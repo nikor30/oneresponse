@@ -10,6 +10,7 @@ Network SLA monitoring tool with a dart/bullseye chart visualization, inspired b
 - **Web GUI** — Manage targets, groups (regions/sites), SLA thresholds, and peers through the browser.
 - **REST API** — Full CRUD API for integration with other tools.
 - **Distributed Probing** — Connect multiple instances via API keys to measure from different network locations.
+- **Cisco IP SLA integration** — Read latency / jitter / loss from on-device IP SLA operations on Cisco routers and switches over SNMP, alongside the local ICMP probes. See the *Cisco IP SLA* section below.
 - **Docker Ready** — Single container with docker-compose support.
 <img width="1073" height="1107" alt="Bildschirmfoto_20260519_112510-1" src="https://github.com/user-attachments/assets/fc576ecb-c4ed-4533-9710-1473c78ed460" />
 <img width="1087" height="1112" alt="Bildschirmfoto_20260519_112852-1" src="https://github.com/user-attachments/assets/9068a252-d228-4d87-a27b-525a6832fb0a" />
@@ -57,6 +58,11 @@ All endpoints under `/api/v1/`:
 | GET | `/measurements/:targetId?from=&to=` | Time-series measurements |
 | GET/POST | `/peers` | List / register peers |
 | POST | `/peers/push` | Receive data from remote peer |
+| GET/POST | `/devices` | List / create Cisco devices |
+| GET/PUT/DELETE | `/devices/:id` | CRUD a Cisco device |
+| POST | `/devices/:id/test` | SNMP connectivity test |
+| GET | `/devices/:id/operations` | Live discover IP SLA operations on the device |
+| POST | `/devices/:id/import` | Import selected operations as targets |
 | POST | `/api-keys` | Create API key |
 | GET | `/api-keys` | List API keys |
 
@@ -114,6 +120,45 @@ Environment variables:
 |----------|---------|-------------|
 | `PORT` | `3000` | Server port |
 | `DB_PATH` | `./data/oneresponse.db` | SQLite database path |
+
+## Cisco IP SLA
+
+oneresponse can read latency / jitter / loss from IP SLA operations already
+configured on Cisco routers and switches, over SNMP. The results flow into
+the same data model as the local ICMP probes — the dart chart and time-series
+graph treat Cisco-sourced targets identically.
+
+**Prerequisites on the Cisco side**
+
+- IP SLA operations are already configured on the device (`ip sla N` …
+  `ip sla schedule N life forever start-time now`). This integration *only
+  reads* results; it does not push configuration.
+- SNMP is reachable from the oneresponse host (we recommend SNMPv3 with
+  authPriv).
+
+**Setup in oneresponse**
+
+1. Go to **Cisco devices** in the menu, add the device with its host, SNMP
+   port, and credentials. Click **Test** to confirm we can reach `sysName`.
+2. Click **Discover** to walk `rttMonCtrlAdminTable`. Select the operations
+   you care about, pick a group, and **Import selected as targets**.
+3. The new targets appear on the dashboard. Within one poll interval (the
+   device's `poll_interval_seconds`, default 60) the dart chart starts
+   reflecting the live operation results.
+
+**Supported operation types**
+
+- `icmp-echo`, `udp-echo`, `tcp-connect`, `http`, `dns` — single-RTT echo
+  results from `rttMonLatestRttOperTable`.
+- `udp-jitter` — full jitter result from `rttMonLatestJitterOperTable`,
+  including loss %, average jitter, and MOS (when the device reports it).
+
+**Credential storage**
+
+SNMP secrets (v2c community, v3 auth / priv passwords) are encrypted at
+rest with AES-256-GCM when the environment variable
+`ONERESPONSE_SECRET_KEY` is set. Without that variable secrets are stored
+in plaintext and a warning is logged on first save.
 
 ## Troubleshooting
 
