@@ -129,21 +129,56 @@ router.get('/:id', (req: Request, res: Response) => {
   res.json(target);
 });
 
+const VALID_PROBE_TYPES = new Set(['icmp', 'cisco-ipsla']);
+const VALID_IPSLA_TYPES  = new Set(['icmp-echo', 'udp-echo', 'udp-jitter', 'tcp-connect', 'http', 'dns']);
+
+function validateCiscoFields(
+  db: ReturnType<typeof getDb>,
+  probeType: string,
+  deviceId: string | null,
+  operIndex: number | null,
+  operType: string | null,
+): string | null {
+  if (probeType === 'icmp') return null;
+  if (probeType !== 'cisco-ipsla') return `invalid probe_type "${probeType}"`;
+  if (!deviceId) return 'device_id is required for probe_type=cisco-ipsla';
+  const dev = db.prepare('SELECT id FROM cisco_devices WHERE id = ?').get(deviceId);
+  if (!dev) return 'device_id does not exist';
+  if (operIndex == null || !Number.isFinite(operIndex)) return 'ipsla_oper_index is required';
+  if (!operType || !VALID_IPSLA_TYPES.has(operType)) return 'ipsla_oper_type is required and must be one of: ' + Array.from(VALID_IPSLA_TYPES).join(', ');
+  return null;
+}
+
 router.post('/', requireAdmin, (req: Request, res: Response) => {
   const db = getDb();
-  const { group_id, name, host, site_code, probe_interval, probe_count, enabled } = req.body;
+  const { group_id, name, host, site_code, probe_interval, probe_count, enabled,
+          probe_type, device_id, ipsla_oper_index, ipsla_oper_type } = req.body;
   if (!group_id || !name || !host) {
     return res.status(400).json({ error: 'group_id, name, and host are required' });
   }
-
   const group = db.prepare('SELECT id FROM groups WHERE id = ?').get(group_id);
   if (!group) return res.status(400).json({ error: 'Invalid group_id' });
 
+  const pType = (probe_type || 'icmp') as string;
+  if (!VALID_PROBE_TYPES.has(pType)) return res.status(400).json({ error: `invalid probe_type "${pType}"` });
+
+  const ciscoErr = validateCiscoFields(db, pType, device_id ?? null, ipsla_oper_index ?? null, ipsla_oper_type ?? null);
+  if (ciscoErr) return res.status(400).json({ error: ciscoErr });
+
   const id = uuidv4();
   db.prepare(`
-    INSERT INTO targets (id, group_id, name, host, site_code, probe_interval, probe_count, enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, group_id, name, host, site_code || null, probe_interval ?? 300, probe_count ?? 20, enabled ?? 1);
+    INSERT INTO targets
+      (id, group_id, name, host, site_code, probe_interval, probe_count, enabled,
+       probe_type, device_id, ipsla_oper_index, ipsla_oper_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, group_id, name, host, site_code || null,
+    probe_interval ?? 300, probe_count ?? 20, enabled ?? 1,
+    pType,
+    pType === 'cisco-ipsla' ? device_id : null,
+    pType === 'cisco-ipsla' ? ipsla_oper_index : null,
+    pType === 'cisco-ipsla' ? ipsla_oper_type : null,
+  );
 
   const target = db.prepare('SELECT * FROM targets WHERE id = ?').get(id);
   res.status(201).json(target);
@@ -154,9 +189,24 @@ router.put('/:id', requireAdmin, (req: Request, res: Response) => {
   const existing = db.prepare('SELECT * FROM targets WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
   if (!existing) return res.status(404).json({ error: 'Target not found' });
 
-  const { group_id, name, host, site_code, probe_interval, probe_count, enabled } = req.body;
+  const { group_id, name, host, site_code, probe_interval, probe_count, enabled,
+          probe_type, device_id, ipsla_oper_index, ipsla_oper_type } = req.body;
+
+  const newProbeType = (probe_type ?? existing.probe_type ?? 'icmp') as string;
+  if (!VALID_PROBE_TYPES.has(newProbeType)) return res.status(400).json({ error: `invalid probe_type "${newProbeType}"` });
+
+  const newDeviceId  = device_id        !== undefined ? device_id        : (existing.device_id as string | null);
+  const newOperIndex = ipsla_oper_index !== undefined ? ipsla_oper_index : (existing.ipsla_oper_index as number | null);
+  const newOperType  = ipsla_oper_type  !== undefined ? ipsla_oper_type  : (existing.ipsla_oper_type as string | null);
+
+  const ciscoErr = validateCiscoFields(db, newProbeType, newDeviceId, newOperIndex, newOperType);
+  if (ciscoErr) return res.status(400).json({ error: ciscoErr });
+
   db.prepare(`
-    UPDATE targets SET group_id = ?, name = ?, host = ?, site_code = ?, probe_interval = ?, probe_count = ?, enabled = ?
+    UPDATE targets
+    SET group_id = ?, name = ?, host = ?, site_code = ?,
+        probe_interval = ?, probe_count = ?, enabled = ?,
+        probe_type = ?, device_id = ?, ipsla_oper_index = ?, ipsla_oper_type = ?
     WHERE id = ?
   `).run(
     group_id ?? existing.group_id,
@@ -166,6 +216,10 @@ router.put('/:id', requireAdmin, (req: Request, res: Response) => {
     probe_interval ?? existing.probe_interval,
     probe_count ?? existing.probe_count,
     enabled ?? existing.enabled,
+    newProbeType,
+    newProbeType === 'cisco-ipsla' ? newDeviceId  : null,
+    newProbeType === 'cisco-ipsla' ? newOperIndex : null,
+    newProbeType === 'cisco-ipsla' ? newOperType  : null,
     req.params.id
   );
 

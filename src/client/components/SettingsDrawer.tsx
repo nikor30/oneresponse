@@ -16,10 +16,11 @@ const NAV_PUBLIC = [
   { path: '/top', label: 'Top 10',    icon: '★' },
 ];
 const NAV_ADMIN = [
-  { path: '/targets',  label: 'Targets',      icon: '🎯' },
-  { path: '/groups',   label: 'Groups & SLA', icon: '🗂' },
-  { path: '/peers',    label: 'Peers',        icon: '🌐' },
-  { path: '/settings', label: 'Settings',     icon: '⚙' },
+  { path: '/targets',  label: 'Targets',       icon: '🎯' },
+  { path: '/groups',   label: 'Groups & SLA',  icon: '🗂' },
+  { path: '/peers',    label: 'Peers',         icon: '🌐' },
+  { path: '/devices',  label: 'Cisco devices', icon: '🛜' },
+  { path: '/settings', label: 'Settings',      icon: '⚙' },
 ];
 
 export default function SettingsDrawer({ open, onClose, canEdit }: Props) {

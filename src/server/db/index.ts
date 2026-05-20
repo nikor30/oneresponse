@@ -30,6 +30,16 @@ function runMigrations(d: Database.Database): void {
   ensureCol('groups', 'viz_latency_min', 'REAL');
   ensureCol('groups', 'viz_latency_max', 'REAL');
   ensureCol('peers', 'last_error', 'TEXT');
+
+  // Cisco IP SLA integration — new columns on targets + measurements.
+  // cisco_devices itself is created by CREATE TABLE IF NOT EXISTS in
+  // schema.ts and so doesn't need a migration step.
+  ensureCol('targets',      'probe_type',       `TEXT NOT NULL DEFAULT 'icmp'`);
+  ensureCol('targets',      'device_id',        'TEXT');
+  ensureCol('targets',      'ipsla_oper_index', 'INTEGER');
+  ensureCol('targets',      'ipsla_oper_type',  'TEXT');
+  ensureCol('measurements', 'mos',              'REAL');
+  ensureCol('measurements', 'source',           'TEXT');
 }
 
 export function closeDb(): void {

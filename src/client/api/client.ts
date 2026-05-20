@@ -38,7 +38,42 @@ export interface Target {
   probe_interval: number;
   probe_count: number;
   enabled: number;
+  probe_type: 'icmp' | 'cisco-ipsla';
+  device_id: string | null;
+  ipsla_oper_index: number | null;
+  ipsla_oper_type: string | null;
   created_at: number;
+}
+
+export interface CiscoDevice {
+  id: string;
+  name: string;
+  host: string;
+  snmp_port: number;
+  snmp_version: '2c' | '3';
+  v3_username: string | null;
+  v3_auth_protocol: string | null;
+  v3_priv_protocol: string | null;
+  poll_interval_seconds: number;
+  enabled: number;
+  last_seen: number | null;
+  last_error: string | null;
+  created_at: number;
+}
+
+export interface DiscoveredOperation {
+  index: number;
+  tag: string;
+  rttType: number;
+  kind: 'icmp-echo' | 'udp-echo' | 'udp-jitter' | 'tcp-connect' | 'http' | 'dns' | 'unsupported';
+  target: string | null;
+}
+
+export interface DeviceTestResult {
+  ok: boolean;
+  sysName?: string;
+  sysObjectID?: string;
+  error?: string;
 }
 
 export interface Measurement {
@@ -224,6 +259,21 @@ export const api = {
     request<Record<string, string | null>>('/settings', {
       method: 'PUT',
       body: JSON.stringify(patch),
+    }),
+
+  // Cisco devices
+  getDevices: () => request<CiscoDevice[]>('/devices'),
+  createDevice: (data: Partial<CiscoDevice> & { community?: string; v3_auth_password?: string; v3_priv_password?: string }) =>
+    request<CiscoDevice>('/devices', { method: 'POST', body: JSON.stringify(data) }),
+  updateDevice: (id: string, data: Partial<CiscoDevice> & { community?: string; v3_auth_password?: string; v3_priv_password?: string }) =>
+    request<CiscoDevice>(`/devices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteDevice: (id: string) => request<void>(`/devices/${id}`, { method: 'DELETE' }),
+  testDevice: (id: string) => request<DeviceTestResult>(`/devices/${id}/test`, { method: 'POST', body: '{}' }),
+  discoverOperations: (id: string) => request<DiscoveredOperation[]>(`/devices/${id}/operations`),
+  importDeviceOperations: (id: string, group_id: string, operations: { index: number; type: string; target?: string | null; name?: string }[]) =>
+    request<{ created: string[]; errors: string[] }>(`/devices/${id}/import`, {
+      method: 'POST',
+      body: JSON.stringify({ group_id, operations }),
     }),
 
   // Auth
