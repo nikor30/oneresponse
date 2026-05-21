@@ -59,6 +59,8 @@ export default function SettingsPage() {
 
       <HostSection settings={settings} save={save} />
 
+      <BuildSection settings={settings} />
+
       <SyslogSection settings={settings} save={save} />
 
       <RetentionSection settings={settings} save={save} />
@@ -129,11 +131,13 @@ function HostSection({ settings, save }: { settings: Record<string, string | nul
   const [dnsServer, setDnsServer] = useState(settings.dns_server || '');
   const [domain, setDomain] = useState(settings.search_domain || '');
   const [ntp, setNtp] = useState(settings.ntp_server || '');
+  const [defaultSnmpCommunity, setDefaultSnmpCommunity] = useState(settings.default_snmp_community || 'public');
 
   useEffect(() => {
     setDnsServer(settings.dns_server || '');
     setDomain(settings.search_domain || '');
     setNtp(settings.ntp_server || '');
+    setDefaultSnmpCommunity(settings.default_snmp_community || 'public');
   }, [settings]);
 
   return (
@@ -150,16 +154,38 @@ function HostSection({ settings, save }: { settings: Record<string, string | nul
       <Field label="NTP server" hint="Stored for reference. Configure NTP on the host so all instances agree on time — the dashboard surfaces a drift warning when peers disagree.">
         <input value={ntp} onChange={e => setNtp(e.target.value)} placeholder="pool.ntp.org" style={input} />
       </Field>
+      <Field label="Default SNMP community" hint="Used as fallback when adding SNMPv2c Cisco devices and no community is entered on the device form.">
+        <input value={defaultSnmpCommunity} onChange={e => setDefaultSnmpCommunity(e.target.value)} placeholder="public" style={input} />
+      </Field>
+
       <div style={{ marginTop: 10 }}>
         <button
           onClick={() => save({
             dns_server:    dnsServer.trim() || null,
             search_domain: domain.trim() || null,
             ntp_server:    ntp.trim() || null,
+            default_snmp_community: defaultSnmpCommunity.trim() || null,
           })}
           style={primaryBtn(false)}
         >Save host settings</button>
       </div>
+    </Section>
+  );
+}
+
+
+function BuildSection({ settings }: { settings: Record<string, string | null> }) {
+  return (
+    <Section
+      title="Build"
+      subtitle="Runtime build information from the backend process."
+    >
+      <Field label="Version">
+        <input value={settings.build_version || 'unknown'} readOnly style={{ ...input, opacity: 0.85 }} />
+      </Field>
+      <Field label="Commit" hint="Set APP_COMMIT (or GIT_COMMIT) env var during deployment to populate this field.">
+        <input value={settings.build_commit || 'not set'} readOnly style={{ ...input, opacity: 0.85 }} />
+      </Field>
     </Section>
   );
 }

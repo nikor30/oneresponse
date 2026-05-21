@@ -1,3 +1,4 @@
+import pkg from '../../../package.json' assert { type: 'json' };
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/index.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -271,6 +272,14 @@ const SECRET_SETTING_KEYS = new Set([
   'admin_password_hash',
 ]);
 
+function withRuntimeMetadata(out: Record<string, string | null>): Record<string, string | null> {
+  return {
+    ...out,
+    build_version: process.env.APP_VERSION || pkg.version || null,
+    build_commit: process.env.APP_COMMIT || process.env.GIT_COMMIT || null,
+  };
+}
+
 router.get('/settings', (_req: Request, res: Response) => {
   const db = getDb();
   const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string | null }>;
@@ -279,7 +288,7 @@ router.get('/settings', (_req: Request, res: Response) => {
     if (SECRET_SETTING_KEYS.has(r.key)) continue;
     out[r.key] = r.value;
   }
-  res.json(out);
+  res.json(withRuntimeMetadata(out));
 });
 
 router.put('/settings', requireAdmin, (req: Request, res: Response) => {
@@ -313,7 +322,7 @@ router.put('/settings', requireAdmin, (req: Request, res: Response) => {
     if (SECRET_SETTING_KEYS.has(r.key)) continue;
     out[r.key] = r.value;
   }
-  res.json(out);
+  res.json(withRuntimeMetadata(out));
 });
 
 // Storage stats — row counts and oldest measurement, so the operator
