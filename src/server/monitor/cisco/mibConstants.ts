@@ -124,7 +124,6 @@ export function rttTypeToOperKind(n: number): OperKind {
     default: return 'unsupported';
   }
 }
-main
 export const SENSE_OK_PRIMARY = 2;
 export const SENSE_OK_ALT = 1;
 export function isSenseOk(v: number | null | undefined): boolean {
