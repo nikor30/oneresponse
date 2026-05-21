@@ -7,6 +7,7 @@ import { pollAllOperations, type DeviceTarget } from './cisco/collector.js';
 import { decryptSecret } from './cisco/secret.js';
 import type { CiscoDeviceConn } from './cisco/snmp.js';
 import type { OperKind } from './cisco/mibConstants.js';
+import { cdbg } from './cisco/debug.js';
 
 // A row from `targets` joined with the group's SLA thresholds, plus the
 // new cisco-ipsla columns. probe_type discriminates between the ICMP
@@ -62,7 +63,7 @@ function recordMeasurement(
   const db = getDb();
   const timestamp = Math.floor(Date.now() / 1000);
 
-  db.prepare(`
+  const insertResult = db.prepare(`
     INSERT INTO measurements (target_id, peer_id, timestamp, latency_min, latency_avg, latency_max,
                               jitter, loss_pct, probe_count, rtts, sla_score, mos, source)
     VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -80,6 +81,21 @@ function recordMeasurement(
     result.mos ?? null,
     source,
   );
+
+  if (source === 'cisco') {
+    cdbg('measurement.insert', {
+      target_id: target.id,
+      target_name: target.name,
+      source,
+      timestamp,
+      changes: insertResult.changes,
+      lastInsertRowid: Number(insertResult.lastInsertRowid),
+      latency_avg: result.latency_avg,
+      loss_pct: result.loss_pct,
+      jitter: result.jitter,
+      sla_score: slaScore,
+    });
+  }
 
   pushToPeers({
     target_id: target.id,
@@ -146,7 +162,18 @@ async function pollCiscoDevice(d: DeviceRow, targets: Target[]): Promise<void> {
       ? [{ target_id: t.id, oper_index: t.ipsla_oper_index, kind: t.ipsla_oper_type as OperKind }]
       : []
   );
-  if (ops.length === 0) return;
+  cdbg('pollCiscoDevice.start', {
+    device_id: d.id,
+    device_name: d.name,
+    host: d.host,
+    targets: targets.length,
+    ops: ops.length,
+    opSummary: ops.map(o => ({ target_id: o.target_id, oper_index: o.oper_index, kind: o.kind })),
+  });
+  if (ops.length === 0) {
+    cdbg('pollCiscoDevice.noOps', { device_id: d.id });
+    return;
+  }
 
   let results;
   const db = getDb();

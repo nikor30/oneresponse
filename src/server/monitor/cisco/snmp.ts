@@ -7,6 +7,7 @@
 // manage lifecycle. Errors are returned as a single typed Error.
 
 import snmp from 'net-snmp';
+import { cdbg } from './debug.js';
 
 export interface CiscoDeviceConn {
   host: string;
@@ -23,7 +24,7 @@ export interface CiscoDeviceConn {
 export interface SnmpVarbind {
   oid: string;
   type: number;
-  value: string | number | Buffer | boolean | null;
+  value: string | number | bigint | Buffer | boolean | null;
 }
 
 const DEFAULT_TIMEOUT_MS = 4000;
@@ -75,19 +76,35 @@ function mapPrivProto(s: string | null | undefined): number | null {
 }
 
 export async function snmpGet(d: CiscoDeviceConn, oids: string[]): Promise<SnmpVarbind[]> {
+  cdbg('snmpGet.request', { host: d.host, version: d.snmp_version, oids });
   const session = createSession(d);
   return new Promise<SnmpVarbind[]>((resolve, reject) => {
     session.get(oids, (err: Error | null, varbinds: SnmpVarbind[]) => {
       session.close();
-      if (err) return reject(err);
+      if (err) {
+        cdbg('snmpGet.error', { host: d.host, error: err.message });
+        return reject(err);
+      }
       // Replace noSuchObject / noSuchInstance / endOfMibView responses
       // with a null-valued varbind so the caller can treat them as
       // "value missing" without having to know about SNMP error types.
       // (Older / newer MIB revisions move columns around; we tolerate
       // missing leaves rather than failing the whole probe.)
       const cleaned = (varbinds || []).map(vb => {
-        if (snmp.isVarbindError(vb)) return { oid: vb.oid, type: 5, value: null };
+        if (snmp.isVarbindError(vb)) {
+          cdbg('snmpGet.varbindError', { oid: vb.oid, type: vb.type });
+          return { oid: vb.oid, type: 5, value: null };
+        }
         return vb;
+      });
+      cdbg('snmpGet.response', {
+        host: d.host,
+        values: cleaned.map(vb => ({
+          oid: vb.oid,
+          type: vb.type,
+          // Render Buffer as hex so it serialises cleanly
+          value: Buffer.isBuffer(vb.value) ? vb.value.toString('hex') : vb.value,
+        })),
       });
       resolve(cleaned);
     });
@@ -145,6 +162,9 @@ function decodeValue(vb: SnmpVarbind): string | number | null {
   const v = vb.value;
   if (v == null) return null;
   if (typeof v === 'number') return v;
+  // net-snmp emits BigInt for Counter64. We don't need 64-bit precision
+  // for any column we read, so cast to Number.
+  if (typeof v === 'bigint') return Number(v);
   if (typeof v === 'string') return v;
   if (typeof v === 'boolean') return v ? 1 : 0;
   if (Buffer.isBuffer(v)) {
