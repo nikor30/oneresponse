@@ -42,7 +42,7 @@ const fakeNetSnmp = vi.hoisted(() => {
         case '1.3.6.1.4.1.9.9.42.1.5.2.1.32': return 0;    // lossDs
         case '1.3.6.1.4.1.9.9.42.1.5.2.1.33': return 0;    // OOS
         case '1.3.6.1.4.1.9.9.42.1.5.2.1.34': return 0;    // MIA
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.36': return 2;    // sense OK
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.36': return 1;    // sense OK
         case '1.3.6.1.4.1.9.9.42.1.5.2.1.42': return 0;    // MOS not reported
       }
     }
@@ -50,7 +50,7 @@ const fakeNetSnmp = vi.hoisted(() => {
     if (operIndex === 10) {
       switch (colPrefix) {
         case '1.3.6.1.4.1.9.9.42.1.2.10.1.1': return 18;   // completion time
-        case '1.3.6.1.4.1.9.9.42.1.2.10.1.2': return 2;    // sense OK
+        case '1.3.6.1.4.1.9.9.42.1.2.10.1.2': return 1;    // sense OK
       }
     }
     // sysName / sysObjectID
@@ -146,7 +146,7 @@ describe('cisco pipeline — pollAllOperations through mocked SNMP', () => {
             '1.3.6.1.4.1.9.9.42.1.5.2.1.2.100': 440n,
             '1.3.6.1.4.1.9.9.42.1.5.2.1.5.100': 21n,
             '1.3.6.1.4.1.9.9.42.1.5.2.1.6.100': 27n,
-            '1.3.6.1.4.1.9.9.42.1.5.2.1.36.100': 2,
+            '1.3.6.1.4.1.9.9.42.1.5.2.1.36.100': 1,
           };
           const vbs = oids.map(oid => ({ oid, type: 70, value: map[oid] ?? 0 }));
           process.nextTick(() => cb(null, vbs));
