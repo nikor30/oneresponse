@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { normaliseEcho, normaliseJitter, decodeTargetAddress } from './collector.js';
-import { SENSE_OK } from './mibConstants.js';
+import { SENSE_OK_ALT, SENSE_OK_PRIMARY } from './mibConstants.js';
 
 describe('normaliseEcho', () => {
   it('happy path — sense=ok, completion time → min=avg=max=rtt', () => {
-    const r = normaliseEcho(42, SENSE_OK);
+    const r = normaliseEcho(42, SENSE_OK_PRIMARY);
     expect(r.latency_min).toBe(42);
     expect(r.latency_avg).toBe(42);
     expect(r.latency_max).toBe(42);
@@ -12,6 +12,12 @@ describe('normaliseEcho', () => {
     expect(r.loss_pct).toBe(0);
     expect(r.probe_count).toBe(1);
     expect(r.rtts).toEqual([42]);
+  });
+
+  it('accepts alternative success sense=1', () => {
+    const r = normaliseEcho(42, SENSE_OK_ALT);
+    expect(r.loss_pct).toBe(0);
+    expect(r.latency_avg).toBe(42);
   });
 
   it('non-ok sense → marks as fully lost', () => {
@@ -24,7 +30,7 @@ describe('normaliseEcho', () => {
 
   it('null completion time → fully lost even if sense is ok', () => {
     // Belt-and-braces: don't lie about RTT if the OID came back empty
-    const r = normaliseEcho(null, SENSE_OK);
+    const r = normaliseEcho(null, SENSE_OK_PRIMARY);
     expect(r.loss_pct).toBe(100);
     expect(r.latency_min).toBe(0);
   });
@@ -44,7 +50,7 @@ describe('normaliseJitter', () => {
        1,    1,                // numNegDs sumNegDs
        0,    0,                // lossSd lossDs
        0,    0,                // mia oos
-       SENSE_OK, 410,          // sense, mos (4.10 reported as 410)
+       SENSE_OK_PRIMARY, 410,          // sense, mos (4.10 reported as 410)
     ]);
     expect(r.latency_min).toBe(18);
     expect(r.latency_avg).toBe(25);
@@ -62,7 +68,7 @@ describe('normaliseJitter', () => {
       80, 80, 1, 1,
        0, 0, 0, 0, 0, 0, 0, 0,
       10, 5,  4, 1,
-       SENSE_OK, 360,
+       SENSE_OK_PRIMARY, 360,
     ]);
     expect(r.loss_pct).toBe(20);
     expect(r.probe_count).toBe(80);
@@ -85,7 +91,7 @@ describe('normaliseJitter', () => {
       0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0,
-      SENSE_OK, 0,
+      SENSE_OK_PRIMARY, 0,
     ]);
     expect(r.loss_pct).toBe(100);
     expect(r.latency_avg).toBe(0);
@@ -96,7 +102,7 @@ describe('normaliseJitter', () => {
       10, 250, 20, 30,
       4, 12, 2, 4, 3, 9, 1, 1,
       0, 0, 0, 0,
-      SENSE_OK, null,
+      SENSE_OK_PRIMARY, null,
     ]);
     expect(r.mos).toBeNull();
   });
