@@ -90,7 +90,10 @@ router.post('/', requireAdmin, (req: Request, res: Response) => {
   const b = req.body as Partial<DeviceRow> & { v3_auth_password?: string; v3_priv_password?: string; community?: string };
   if (!b.name || !b.host) return res.status(400).json({ error: 'name and host are required' });
   const version = b.snmp_version === '3' ? '3' : '2c';
-  if (version === '2c' && !b.community) return res.status(400).json({ error: 'community is required for SNMP v2c' });
+  const defaultCommunityRow = getDb().prepare("SELECT value FROM settings WHERE key = 'default_snmp_community'").get() as { value: string | null } | undefined;
+  const defaultCommunity = (defaultCommunityRow?.value || '').trim();
+  const effectiveCommunity = (b.community || '').trim() || defaultCommunity;
+  if (version === '2c' && !effectiveCommunity) return res.status(400).json({ error: 'community is required for SNMP v2c (or set default_snmp_community in Settings)' });
   if (version === '3' && !b.v3_username) return res.status(400).json({ error: 'v3_username is required for SNMP v3' });
 
   const id = uuidv4();
@@ -103,7 +106,7 @@ router.post('/', requireAdmin, (req: Request, res: Response) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, b.name.trim(), b.host.trim(), b.snmp_port ?? 161, version,
-    version === '2c' ? encryptSecret(b.community!) : null,
+    version === '2c' ? encryptSecret(effectiveCommunity) : null,
     version === '3' ? b.v3_username : null,
     version === '3' ? (b.v3_auth_protocol || null) : null,
     version === '3' ? encryptSecret(b.v3_auth_password ?? null) : null,

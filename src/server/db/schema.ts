@@ -116,4 +116,5 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 INSERT OR IGNORE INTO settings (key, value) VALUES ('site_name', 'oneresponse');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_raw_days', '90');
 INSERT OR IGNORE INTO settings (key, value) VALUES ('retention_rtts_days', '7');
+INSERT OR IGNORE INTO settings (key, value) VALUES ('default_snmp_community', 'public');
 `;
