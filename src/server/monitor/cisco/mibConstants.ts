@@ -128,4 +128,6 @@ export function rttTypeToOperKind(n: number): OperKind {
 // rttMonLatestRttOperSense — 2 = ok, everything else is a failure
 // (timeout, disconnected, dnsError, httpError, ...). For the dart chart
 // we just need to know "did the operation succeed".
-export const SENSE_OK = 2;
+// Some IOS / XE releases report ok(1) for rttMon...Sense; others map to 2.
+// We normalise on 1 because field evidence shows 1 on deployed switches.
+export const SENSE_OK = 1;

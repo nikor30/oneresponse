@@ -270,7 +270,7 @@ export default function DeviceManager() {
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => onTest(d)} disabled={!!testing[d.id]} style={smallBtn}>{testing[d.id] ? 'Testing…' : 'Test'}</button>{' '}
                     <button onClick={() => onDiscover(d)} style={smallBtn}>Discover</button>{' '}
-                    <button onClick={() => onDiagnose(d)} disabled={!!diagnosing[d.id]} style={smallBtn} title="Run one poll cycle in-process and show raw values">{diagnosing[d.id] ? 'Diagnosing…' : 'Diagnose'}</button>{' '}
+                    <button onClick={() => onDiagnose(d)} disabled={!!diagnosing[d.id]} style={smallBtn} title="Run one poll cycle in-process and show raw values">{diagnosing[d.id] ? 'Debugging…' : 'Debug'}</button>{' '}
                     <button onClick={() => onEdit(d)} style={smallBtn}>Edit</button>{' '}
                     <button onClick={() => onDelete(d.id)} style={{ ...smallBtn, background: '#fee', color: '#dc2626' }}>Delete</button>
                   </td>
@@ -296,7 +296,7 @@ export default function DeviceManager() {
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <td colSpan={6} style={{ padding: '0 16px 12px' }}>
                       <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.35)', color: '#dc2626', padding: '8px 12px', borderRadius: 6, fontSize: 12 }}>
-                        <strong>Diagnose failed</strong> — {diagnoseErr[d.id]}
+                        <strong>Debug failed</strong> — {diagnoseErr[d.id]}
                       </div>
                     </td>
                   </tr>
@@ -471,7 +471,7 @@ function DiagnosticsPanel({ data, onClose }: { data: DeviceDiagnostics; onClose:
       )}
 
       {data.results.map(r => {
-        const senseOk = r.sense === 2;
+        const senseOk = r.sense === 1 || r.sense === 2;
         const inserted = r.would_insert as { latency_avg?: number; loss_pct?: number; sla_score?: number } | undefined;
         const looksGood = !r.error && senseOk && (inserted?.loss_pct ?? 100) < 100;
         return (
