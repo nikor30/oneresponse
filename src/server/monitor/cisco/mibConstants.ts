@@ -131,4 +131,3 @@ export function isSenseOk(v: number | null | undefined): boolean {
   return v === SENSE_OK_PRIMARY || v === SENSE_OK_ALT;
 }
 export const SENSE_OK = 1;
-main
