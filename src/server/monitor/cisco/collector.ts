@@ -40,7 +40,7 @@ import {
   RTT_MON_LATEST_JITTER_OOS,
   RTT_MON_LATEST_JITTER_SENSE,
   RTT_MON_LATEST_JITTER_MOS,
-  SENSE_OK,
+  isSenseOk,
   rttTypeToOperKind,
   type OperKind,
 } from './mibConstants.js';
@@ -196,10 +196,10 @@ export async function pollAllOperations(d: CiscoDeviceConn, ops: DeviceTarget[])
 // ── Normalisation (pure — unit-tested) ────────────────────────────
 
 export function normaliseEcho(completionTimeMs: number | null, sense: number | null): ProbeResult {
-  const ok = sense === SENSE_OK;
+  const ok = isSenseOk(sense);
   if (!ok || completionTimeMs == null || completionTimeMs < 0) {
     cdbg('normaliseEcho.downSample', {
-      reason: !ok ? `sense=${sense} (expected ${SENSE_OK})` : `completionTimeMs=${completionTimeMs}`,
+      reason: !ok ? `sense=${sense} (expected 1 or 2)` : `completionTimeMs=${completionTimeMs}`,
       sense, completionTimeMs,
     });
     return downSample();
@@ -231,11 +231,11 @@ export function normaliseJitter(v: (number | null)[]): ProbeResult & { mos?: num
   // Reason-trace when we drop the sample. Surfaced via DEBUG_CISCO=1
   // and via the /diagnostics endpoint so the operator immediately
   // knows whether it's a sense problem, a no-RTT problem, or both.
-  if (sense !== SENSE_OK || !numRtt || numRtt <= 0) {
+  if (!isSenseOk(sense) || !numRtt || numRtt <= 0) {
     cdbg('normaliseJitter.downSample', {
       reason:
-        sense !== SENSE_OK
-          ? `sense=${sense} (expected ${SENSE_OK})`
+        !isSenseOk(sense)
+          ? `sense=${sense} (expected 1 or 2)`
           : `numRtt=${numRtt}`,
       sense, numRtt, rttSum, rttMin, rttMax,
     });
