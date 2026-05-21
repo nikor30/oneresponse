@@ -15,6 +15,7 @@
 
 import type { ProbeResult } from '../prober.js';
 import { snmpGet, snmpTableColumns, type CiscoDeviceConn } from './snmp.js';
+import { cdbg } from './debug.js';
 import {
   RTT_MON_CTRL_ADMIN_TAG,
   RTT_MON_CTRL_ADMIN_RTT_TYPE,
@@ -111,6 +112,7 @@ export async function pollOperation(
   operIndex: number,
   kind: OperKind,
 ): Promise<ProbeResult> {
+  cdbg('pollOperation.start', { host: d.host, operIndex, kind });
   if (kind === 'udp-jitter') {
     const oids = [
       `${RTT_MON_LATEST_JITTER_NUM_RTT}.${operIndex}`,
@@ -133,11 +135,15 @@ export async function pollOperation(
       `${RTT_MON_LATEST_JITTER_MOS}.${operIndex}`,
     ];
     const vbs = await snmpGet(d, oids);
-    return normaliseJitter(vbs.map(asNum));
+    const nums = vbs.map(asNum);
+    const result = normaliseJitter(nums);
+    cdbg('pollOperation.end', { host: d.host, operIndex, kind, raw: nums, result });
+    return result;
   }
 
   // All other supported kinds use the latest-RTT-oper table.
   if (kind === 'unsupported') {
+    cdbg('pollOperation.end', { host: d.host, operIndex, kind, note: 'unsupported kind, returning down sample' });
     return downSample();
   }
   const oids = [
@@ -145,7 +151,11 @@ export async function pollOperation(
     `${RTT_MON_LATEST_RTT_OPER_SENSE}.${operIndex}`,
   ];
   const vbs = await snmpGet(d, oids);
-  return normaliseEcho(asNum(vbs[0]), asNum(vbs[1]));
+  const ct = asNum(vbs[0]);
+  const se = asNum(vbs[1]);
+  const result = normaliseEcho(ct, se);
+  cdbg('pollOperation.end', { host: d.host, operIndex, kind, raw: { completionTime: ct, sense: se }, result });
+  return result;
 }
 
 // ── Polling — every operation on a device in one session ──────────
@@ -172,7 +182,12 @@ export async function pollAllOperations(d: CiscoDeviceConn, ops: DeviceTarget[])
       const result = await pollOperation(d, op.oper_index, op.kind);
       out.push({ target_id: op.target_id, result });
     } catch (err) {
-      out.push({ target_id: op.target_id, result: downSample(), error: (err as Error).message });
+      const message = (err as Error).message;
+      cdbg('pollOperation.failed', { host: d.host, operIndex: op.oper_index, kind: op.kind, error: message });
+      // Stop swallowing this — log at warn so the operator sees SNMP
+      // failures in the regular server log even without DEBUG_CISCO.
+      console.warn(`[cisco] poll failed host=${d.host} operIndex=${op.oper_index} kind=${op.kind}: ${message}`);
+      out.push({ target_id: op.target_id, result: downSample(), error: message });
     }
   }
   return out;
@@ -183,6 +198,10 @@ export async function pollAllOperations(d: CiscoDeviceConn, ops: DeviceTarget[])
 export function normaliseEcho(completionTimeMs: number | null, sense: number | null): ProbeResult {
   const ok = sense === SENSE_OK;
   if (!ok || completionTimeMs == null || completionTimeMs < 0) {
+    cdbg('normaliseEcho.downSample', {
+      reason: !ok ? `sense=${sense} (expected ${SENSE_OK})` : `completionTimeMs=${completionTimeMs}`,
+      sense, completionTimeMs,
+    });
     return downSample();
   }
   return {
@@ -209,7 +228,17 @@ export function normaliseJitter(v: (number | null)[]): ProbeResult & { mos?: num
     lossSd, lossDs, mia, oos, sense, mosRaw,
   ] = v;
 
+  // Reason-trace when we drop the sample. Surfaced via DEBUG_CISCO=1
+  // and via the /diagnostics endpoint so the operator immediately
+  // knows whether it's a sense problem, a no-RTT problem, or both.
   if (sense !== SENSE_OK || !numRtt || numRtt <= 0) {
+    cdbg('normaliseJitter.downSample', {
+      reason:
+        sense !== SENSE_OK
+          ? `sense=${sense} (expected ${SENSE_OK})`
+          : `numRtt=${numRtt}`,
+      sense, numRtt, rttSum, rttMin, rttMax,
+    });
     return { ...downSample(), mos: null };
   }
 
@@ -258,12 +287,30 @@ function downSample(): ProbeResult {
   };
 }
 
-function asNum(vb: { value: string | number | Buffer | boolean | null } | undefined): number | null {
+function asNum(vb: { value: string | number | bigint | Buffer | boolean | null } | undefined): number | null {
   if (!vb || vb.value == null) return null;
-  if (typeof vb.value === 'number') return vb.value;
-  if (typeof vb.value === 'string') {
-    const n = parseFloat(vb.value);
+  const v = vb.value;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'bigint') {
+    // net-snmp emits BigInt for Counter64 leaves. We've already lost
+    // precision past 2^53 anyway by virtue of normalising to JS number;
+    // the jitter / RTT counters never come close.
+    return Number(v);
+  }
+  if (typeof v === 'string') {
+    const n = parseFloat(v);
     return Number.isFinite(n) ? n : null;
+  }
+  if (Buffer.isBuffer(v)) {
+    // Some IOS versions return numeric leaves as zero-padded ASCII
+    // octet strings ("00000020"). Try to parse as text first; failing
+    // that, treat 4-byte unsigned BE as the integer (matches how
+    // Counter32 used to be wire-encoded).
+    const s = v.toString('utf8');
+    const fromText = parseFloat(s);
+    if (Number.isFinite(fromText)) return fromText;
+    if (v.length === 4) return v.readUInt32BE(0);
+    return null;
   }
   return null;
 }

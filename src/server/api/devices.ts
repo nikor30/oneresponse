@@ -5,10 +5,12 @@ import { requireAdmin } from '../auth.js';
 import {
   testConnection as ciscoTestConnection,
   discoverOperations as ciscoDiscoverOperations,
+  pollOperation as ciscoPollOperation,
   type DiscoveredOperation,
 } from '../monitor/cisco/collector.js';
 import { encryptSecret, decryptSecret } from '../monitor/cisco/secret.js';
 import { snmpGet, type CiscoDeviceConn } from '../monitor/cisco/snmp.js';
+import { calculateSlaScore } from '../monitor/scoring.js';
 import {
   RTT_MON_LATEST_RTT_OPER_COMPLETION_TIME,
   RTT_MON_LATEST_RTT_OPER_SENSE,
@@ -22,6 +24,7 @@ import {
   RTT_MON_LATEST_JITTER_MIA,
   RTT_MON_LATEST_JITTER_SENSE,
   RTT_MON_LATEST_JITTER_MOS,
+  type OperKind,
 } from '../monitor/cisco/mibConstants.js';
 
 const router = Router();
@@ -226,6 +229,155 @@ router.get('/:id/inspect/:operIndex', requireAdmin, async (req: Request, res: Re
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });
   }
+});
+
+// One-shot dry run of the full pipeline for this device. Discovers every
+// cisco-ipsla target bound to the device, polls each one (raw SNMP +
+// normalised result + what the INSERT would write) and returns the lot
+// as structured JSON — without writing anything to the DB.
+//
+// Use this any time the dashboard says "no data" for a Cisco target:
+//   curl -b cookie.jar http://onere/api/v1/devices/<id>/diagnostics
+// The operator gets every stage's output side by side so it's obvious
+// which one is failing.
+router.get('/:id/diagnostics', requireAdmin, async (req: Request, res: Response) => {
+  const existing = loadDeviceOr404(String(req.params.id), res); if (!existing) return;
+  const conn = rowToConn(existing);
+
+  interface OpDiag {
+    target_id: string;
+    target_name: string;
+    target_enabled: boolean;
+    oper_index: number;
+    oper_type: string;
+    varbinds?: { name: string; oid: string; value: unknown }[];
+    raw_values?: Record<string, number | null>;
+    sense?: number | null;
+    normalised?: Record<string, unknown>;
+    would_insert?: Record<string, unknown>;
+    note?: string;
+    error?: string;
+  }
+
+  const ranAt = Math.floor(Date.now() / 1000);
+  const db = getDb();
+  const targets = db.prepare(`
+    SELECT t.id, t.name, t.enabled, t.ipsla_oper_index, t.ipsla_oper_type,
+           g.sla_latency_ms, g.sla_jitter_ms, g.sla_loss_pct
+    FROM targets t
+    JOIN groups g ON t.group_id = g.id
+    WHERE t.device_id = ? AND t.probe_type = 'cisco-ipsla'
+    ORDER BY t.ipsla_oper_index
+  `).all(existing.id) as Array<{
+    id: string; name: string; enabled: number;
+    ipsla_oper_index: number | null; ipsla_oper_type: string | null;
+    sla_latency_ms: number; sla_jitter_ms: number; sla_loss_pct: number;
+  }>;
+
+  // First, confirm SNMP works at all
+  let testResult;
+  try { testResult = await ciscoTestConnection(conn); }
+  catch (err) { testResult = { ok: false, error: (err as Error).message }; }
+
+  const results: OpDiag[] = [];
+  for (const t of targets) {
+    if (t.ipsla_oper_index == null || !t.ipsla_oper_type) {
+      results.push({
+        target_id: t.id, target_name: t.name, target_enabled: !!t.enabled,
+        oper_index: -1, oper_type: t.ipsla_oper_type || '(null)',
+        note: 'target has null ipsla_oper_index or ipsla_oper_type — would be skipped by the scheduler',
+      });
+      continue;
+    }
+    const opIdx = t.ipsla_oper_index;
+    const kind = t.ipsla_oper_type as OperKind;
+
+    // Stage A: raw SNMP read of every column we care about, named.
+    const named: { name: string; oid: string }[] = kind === 'udp-jitter'
+      ? [
+          { name: 'numRtt',  oid: RTT_MON_LATEST_JITTER_NUM_RTT },
+          { name: 'rttSum',  oid: RTT_MON_LATEST_JITTER_RTT_SUM },
+          { name: 'rttMin',  oid: RTT_MON_LATEST_JITTER_RTT_MIN },
+          { name: 'rttMax',  oid: RTT_MON_LATEST_JITTER_RTT_MAX },
+          { name: 'lossSd',  oid: RTT_MON_LATEST_JITTER_LOSS_SD },
+          { name: 'lossDs',  oid: RTT_MON_LATEST_JITTER_LOSS_DS },
+          { name: 'oos',     oid: RTT_MON_LATEST_JITTER_OOS },
+          { name: 'mia',     oid: RTT_MON_LATEST_JITTER_MIA },
+          { name: 'sense',   oid: RTT_MON_LATEST_JITTER_SENSE },
+          { name: 'mos',     oid: RTT_MON_LATEST_JITTER_MOS },
+        ]
+      : [
+          { name: 'completionTime', oid: RTT_MON_LATEST_RTT_OPER_COMPLETION_TIME },
+          { name: 'sense',          oid: RTT_MON_LATEST_RTT_OPER_SENSE },
+        ];
+
+    let varbinds: { name: string; oid: string; value: unknown }[] | undefined;
+    const raw_values: Record<string, number | null> = {};
+    let sense: number | null = null;
+    let normalised: Record<string, unknown> | undefined;
+    let would_insert: Record<string, unknown> | undefined;
+    let error: string | undefined;
+
+    try {
+      const oids = named.map(n => `${n.oid}.${opIdx}`);
+      const vbs = await snmpGet(conn, oids);
+      varbinds = named.map((n, i) => ({ name: n.name, oid: oids[i], value: vbs[i]?.value ?? null }));
+      for (let i = 0; i < named.length; i++) {
+        const v = vbs[i]?.value;
+        raw_values[named[i].name] = typeof v === 'number' ? v : v == null ? null : Number(v);
+      }
+      sense = raw_values.sense ?? null;
+
+      // Stage B: actually run the collector path (this is the same
+      // call the scheduler makes — guarantees we surface bugs there too)
+      const result = await ciscoPollOperation(conn, opIdx, kind);
+      normalised = result as unknown as Record<string, unknown>;
+      const slaScore = calculateSlaScore(
+        { latency_avg: result.latency_avg, jitter: result.jitter, loss_pct: result.loss_pct },
+        { sla_latency_ms: t.sla_latency_ms, sla_jitter_ms: t.sla_jitter_ms, sla_loss_pct: t.sla_loss_pct },
+      );
+      would_insert = {
+        target_id: t.id,
+        timestamp: ranAt,
+        latency_min: result.latency_min,
+        latency_avg: result.latency_avg,
+        latency_max: result.latency_max,
+        jitter: result.jitter,
+        loss_pct: result.loss_pct,
+        probe_count: result.probe_count,
+        sla_score: slaScore,
+        mos: (result as { mos?: number | null }).mos ?? null,
+        source: 'cisco',
+      };
+    } catch (e) {
+      error = (e as Error).message;
+    }
+
+    results.push({
+      target_id: t.id, target_name: t.name, target_enabled: !!t.enabled,
+      oper_index: opIdx, oper_type: kind,
+      varbinds, raw_values, sense, normalised, would_insert, error,
+    });
+  }
+
+  res.json({
+    device_id: existing.id,
+    device_name: existing.name,
+    host: existing.host,
+    snmp_version: existing.snmp_version,
+    ran_at: ranAt,
+    snmp_test: testResult,
+    targets_for_this_device: targets.length,
+    results,
+    // Sanity hint: when sense ≠ 2 for every target, either the OID is
+    // off (col 36 should be SENSE for udp-jitter; col 2 for echo) or
+    // none of the operations are actually active on the device.
+    hint: results.every(r => r.sense != null && r.sense !== 2)
+      ? 'sense is non-OK for every operation — operations may not be scheduled on the device, or the sense column OID is wrong for your IOS version.'
+      : results.every(r => r.sense == null)
+        ? 'sense came back null for every operation — the OID column might not exist on this IOS version, or the operation index is wrong.'
+        : 'See per-target details above.',
+  });
 });
 
 // Import selected operations as oneresponse targets.

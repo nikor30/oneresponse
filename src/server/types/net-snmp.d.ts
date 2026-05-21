@@ -12,7 +12,7 @@ declare module 'net-snmp' {
   export interface Varbind {
     oid: string;
     type: number;
-    value: string | number | Buffer | boolean | null;
+    value: string | number | bigint | Buffer | boolean | null;
   }
 
   export function isVarbindError(vb: Varbind): boolean;
