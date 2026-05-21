@@ -124,11 +124,11 @@ export function rttTypeToOperKind(n: number): OperKind {
     default: return 'unsupported';
   }
 }
-
-// rttMon...Sense values vary by IOS train / operation family.
-// In the field we've observed both 1 and 2 used for successful runs.
+main
 export const SENSE_OK_PRIMARY = 2;
 export const SENSE_OK_ALT = 1;
 export function isSenseOk(v: number | null | undefined): boolean {
   return v === SENSE_OK_PRIMARY || v === SENSE_OK_ALT;
 }
+export const SENSE_OK = 1;
+main
