@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, type CiscoDevice, type DiscoveredOperation, type Group, type DeviceTestResult } from '../api/client';
+import { api, type CiscoDevice, type DiscoveredOperation, type Group, type DeviceTestResult, type DeviceDiagnostics } from '../api/client';
 
 const emptyForm = {
   name: '',
@@ -31,6 +31,9 @@ export default function DeviceManager() {
   const [importGroup, setImportGroup] = useState<string>('');
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Record<string, DeviceDiagnostics>>({});
+  const [diagnosing, setDiagnosing] = useState<Record<string, boolean>>({});
+  const [diagnoseErr, setDiagnoseErr] = useState<Record<string, string>>({});
 
   const load = async () => {
     setError('');
@@ -108,6 +111,19 @@ export default function DeviceManager() {
       setTestResults(prev => ({ ...prev, [d.id]: { ok: false, error: (e as Error).message } }));
     } finally {
       setTesting(t => ({ ...t, [d.id]: false }));
+    }
+  };
+
+  const onDiagnose = async (d: CiscoDevice) => {
+    setDiagnosing(s => ({ ...s, [d.id]: true }));
+    setDiagnoseErr(prev => { const c = { ...prev }; delete c[d.id]; return c; });
+    try {
+      const result = await api.diagnoseDevice(d.id);
+      setDiagnostics(prev => ({ ...prev, [d.id]: result }));
+    } catch (err) {
+      setDiagnoseErr(prev => ({ ...prev, [d.id]: (err as Error).message }));
+    } finally {
+      setDiagnosing(s => ({ ...s, [d.id]: false }));
     }
   };
 
@@ -254,12 +270,13 @@ export default function DeviceManager() {
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => onTest(d)} disabled={!!testing[d.id]} style={smallBtn}>{testing[d.id] ? 'Testing…' : 'Test'}</button>{' '}
                     <button onClick={() => onDiscover(d)} style={smallBtn}>Discover</button>{' '}
+                    <button onClick={() => onDiagnose(d)} disabled={!!diagnosing[d.id]} style={smallBtn} title="Run one poll cycle in-process and show raw values">{diagnosing[d.id] ? 'Diagnosing…' : 'Diagnose'}</button>{' '}
                     <button onClick={() => onEdit(d)} style={smallBtn}>Edit</button>{' '}
                     <button onClick={() => onDelete(d.id)} style={{ ...smallBtn, background: '#fee', color: '#dc2626' }}>Delete</button>
                   </td>
                 </tr>
                 {(result || d.last_error) && (
-                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <tr style={{ borderBottom: diagnostics[d.id] || diagnoseErr[d.id] ? 'none' : '1px solid var(--border)' }}>
                     <td colSpan={6} style={{ padding: '0 16px 12px' }}>
                       <div style={{
                         background: hasErr ? 'rgba(220,38,38,0.08)' : 'rgba(34,197,94,0.08)',
@@ -272,6 +289,25 @@ export default function DeviceManager() {
                           : <><strong>Connection failed</strong> — {result.error}</>
                         ) : (<><strong>Last poll error:</strong> {d.last_error}</>)}
                       </div>
+                    </td>
+                  </tr>
+                )}
+                {diagnoseErr[d.id] && (
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td colSpan={6} style={{ padding: '0 16px 12px' }}>
+                      <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.35)', color: '#dc2626', padding: '8px 12px', borderRadius: 6, fontSize: 12 }}>
+                        <strong>Diagnose failed</strong> — {diagnoseErr[d.id]}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {diagnostics[d.id] && (
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td colSpan={6} style={{ padding: '0 16px 16px' }}>
+                      <DiagnosticsPanel
+                        data={diagnostics[d.id]}
+                        onClose={() => setDiagnostics(prev => { const c = { ...prev }; delete c[d.id]; return c; })}
+                      />
                     </td>
                   </tr>
                 )}
@@ -375,6 +411,122 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>{label}</label>
       {children}
       {hint && <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 3 }}>{hint}</div>}
+    </div>
+  );
+}
+
+// In-page render of one /devices/:id/diagnostics response. Shows each
+// target's raw SNMP varbinds + normalised measurement + what would be
+// written — exactly what we'd want when "import works, graphs empty".
+function DiagnosticsPanel({ data, onClose }: { data: DeviceDiagnostics; onClose: () => void }) {
+  const cardBg = 'var(--bg-card)';
+  return (
+    <div style={{
+      background: cardBg,
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      padding: 14,
+      color: 'var(--text)',
+      fontSize: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <strong style={{ fontSize: 14 }}>
+          Diagnostics: {data.device_name} <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>({data.host} · SNMP v{data.snmp_version})</span>
+        </strong>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Ran {new Date(data.ran_at * 1000).toLocaleString()}</span>
+          <button onClick={onClose} style={smallBtn}>Close</button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 8, marginBottom: 8 }}>
+        <span style={{
+          display: 'inline-block', padding: '2px 8px', borderRadius: 4, marginRight: 8,
+          background: data.snmp_test.ok ? 'rgba(34,197,94,0.15)' : 'rgba(220,38,38,0.15)',
+          color: data.snmp_test.ok ? '#16a34a' : '#dc2626',
+          fontWeight: 600,
+        }}>
+          SNMP {data.snmp_test.ok ? 'OK' : 'FAIL'}
+        </span>
+        {data.snmp_test.ok && data.snmp_test.sysName && <span style={{ color: 'var(--text-muted)' }}>sysName: <code style={code}>{data.snmp_test.sysName}</code></span>}
+        {!data.snmp_test.ok && <span style={{ color: '#dc2626' }}>{data.snmp_test.error}</span>}
+      </div>
+
+      {data.hint && (
+        <div style={{
+          padding: '6px 10px',
+          background: 'rgba(99,102,241,0.08)',
+          border: '1px solid rgba(99,102,241,0.30)',
+          borderRadius: 6,
+          color: 'var(--text)',
+          marginBottom: 10,
+          fontSize: 12,
+        }}>
+          <strong>Hint:</strong> {data.hint}
+        </div>
+      )}
+
+      {data.results.length === 0 && (
+        <div style={{ color: 'var(--text-dim)' }}>No cisco-ipsla targets bound to this device.</div>
+      )}
+
+      {data.results.map(r => {
+        const senseOk = r.sense === 2;
+        const inserted = r.would_insert as { latency_avg?: number; loss_pct?: number; sla_score?: number } | undefined;
+        const looksGood = !r.error && senseOk && (inserted?.loss_pct ?? 100) < 100;
+        return (
+          <div key={r.target_id} style={{
+            marginTop: 10,
+            padding: 10,
+            background: 'var(--bg-page)',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <strong>op #{r.oper_index} · {r.oper_type} · {r.target_name}</strong>
+              <span style={{
+                padding: '1px 8px', borderRadius: 4,
+                background: looksGood ? 'rgba(34,197,94,0.15)' : 'rgba(220,38,38,0.15)',
+                color: looksGood ? '#16a34a' : '#dc2626',
+                fontWeight: 600, fontSize: 11,
+              }}>{looksGood ? 'OK' : r.error ? 'SNMP ERR' : 'DOWN SAMPLE'}</span>
+            </div>
+            {r.note && <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>{r.note}</div>}
+            {r.error && <div style={{ color: '#dc2626', marginTop: 4 }}>SNMP error: {r.error}</div>}
+
+            {r.varbinds && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: 11, marginBottom: 3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Raw SNMP varbinds</div>
+                <table style={{ width: '100%', fontSize: 11, fontFamily: 'monospace', borderCollapse: 'collapse' }}>
+                  <tbody>
+                    {r.varbinds.map(vb => (
+                      <tr key={vb.oid}>
+                        <td style={{ padding: '2px 8px 2px 0', color: 'var(--text)', whiteSpace: 'nowrap' }}>{vb.name}</td>
+                        <td style={{ padding: '2px 8px', color: 'var(--text-muted)' }}>{vb.oid}</td>
+                        <td style={{ padding: '2px 0', color: vb.value == null ? '#dc2626' : 'var(--text)', textAlign: 'right' }}>
+                          {vb.value == null ? '<null>' : String(vb.value)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {r.normalised && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ color: 'var(--text-dim)', fontSize: 11, marginBottom: 3, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Normalised → what the scheduler would write</div>
+                <pre style={{
+                  margin: 0, padding: 8, background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 4, fontSize: 11, overflowX: 'auto', color: 'var(--text)',
+                }}>
+{JSON.stringify(r.would_insert ?? r.normalised, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -76,6 +76,33 @@ export interface DeviceTestResult {
   error?: string;
 }
 
+// Shape of GET /api/v1/devices/:id/diagnostics — one in-process poll
+// cycle per cisco-ipsla target on the device, with every stage's output.
+export interface DeviceDiagnostics {
+  device_id: string;
+  device_name: string;
+  host: string;
+  snmp_version: string;
+  ran_at: number;
+  snmp_test: DeviceTestResult;
+  targets_for_this_device: number;
+  results: Array<{
+    target_id: string;
+    target_name: string;
+    target_enabled: boolean;
+    oper_index: number;
+    oper_type: string;
+    varbinds?: { name: string; oid: string; value: unknown }[];
+    raw_values?: Record<string, number | null>;
+    sense?: number | null;
+    normalised?: Record<string, unknown>;
+    would_insert?: Record<string, unknown>;
+    note?: string;
+    error?: string;
+  }>;
+  hint?: string;
+}
+
 export interface Measurement {
   id: number;
   target_id: string;
@@ -269,6 +296,7 @@ export const api = {
     request<CiscoDevice>(`/devices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteDevice: (id: string) => request<void>(`/devices/${id}`, { method: 'DELETE' }),
   testDevice: (id: string) => request<DeviceTestResult>(`/devices/${id}/test`, { method: 'POST', body: '{}' }),
+  diagnoseDevice: (id: string) => request<DeviceDiagnostics>(`/devices/${id}/diagnostics`),
   discoverOperations: (id: string) => request<DiscoveredOperation[]>(`/devices/${id}/operations`),
   importDeviceOperations: (id: string, group_id: string, operations: { index: number; type: string; target?: string | null; name?: string }[]) =>
     request<{ created: string[]; errors: string[] }>(`/devices/${id}/import`, {
