@@ -110,6 +110,63 @@ router.post('/import', requireAdmin, (req: Request, res: Response) => {
   res.json(result);
 });
 
+// --- bulk operations (must come before /:id) ---------------------------
+
+// Delete many targets at once. Body: { ids: string[] }.
+router.post('/bulk/delete', requireAdmin, (req: Request, res: Response) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((x: unknown) => typeof x === 'string') : [];
+  if (ids.length === 0) return res.status(400).json({ error: 'ids must be a non-empty array' });
+
+  const db = getDb();
+  const del = db.prepare('DELETE FROM targets WHERE id = ?');
+  const tx = db.transaction((rows: string[]) => {
+    let n = 0;
+    for (const id of rows) n += del.run(id).changes;
+    return n;
+  });
+  const deleted = tx(ids);
+  res.json({ deleted });
+});
+
+// Apply the same field changes to many targets at once. Body:
+// { ids: string[], patch: { enabled?, group_id?, probe_interval?, probe_count? } }.
+// Only a safe subset of columns can be bulk-edited; probe wiring
+// (probe_type/device/operation) is intentionally excluded since those are
+// per-target and validated individually.
+const BULK_EDITABLE = new Set(['enabled', 'group_id', 'probe_interval', 'probe_count']);
+
+router.post('/bulk/update', requireAdmin, (req: Request, res: Response) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((x: unknown) => typeof x === 'string') : [];
+  const patch = (req.body?.patch && typeof req.body.patch === 'object') ? req.body.patch as Record<string, unknown> : {};
+  if (ids.length === 0) return res.status(400).json({ error: 'ids must be a non-empty array' });
+
+  const fields = Object.keys(patch).filter(k => BULK_EDITABLE.has(k));
+  if (fields.length === 0) {
+    return res.status(400).json({ error: `patch must include at least one of: ${Array.from(BULK_EDITABLE).join(', ')}` });
+  }
+
+  const db = getDb();
+  if (fields.includes('group_id')) {
+    const g = db.prepare('SELECT id FROM groups WHERE id = ?').get(patch.group_id as string);
+    if (!g) return res.status(400).json({ error: 'Invalid group_id' });
+  }
+
+  const setClause = fields.map(f => `${f} = ?`).join(', ');
+  const values = fields.map(f => {
+    if (f === 'enabled') return patch.enabled ? 1 : 0;
+    if (f === 'probe_interval' || f === 'probe_count') return Number(patch[f]);
+    return patch[f];
+  });
+  const stmt = db.prepare(`UPDATE targets SET ${setClause} WHERE id = ?`);
+  const tx = db.transaction((rows: string[]) => {
+    let n = 0;
+    for (const id of rows) n += stmt.run(...values, id).changes;
+    return n;
+  });
+  const updated = tx(ids);
+  res.json({ updated });
+});
+
 // --- standard CRUD -----------------------------------------------------
 
 router.get('/', (req: Request, res: Response) => {

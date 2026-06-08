@@ -33,6 +33,7 @@ interface DashboardRow {
   target_name: string;
   host: string;
   site_code: string | null;
+  probe_type: string | null;
   timestamp: number | null;
   latency_min: number | null;
   latency_avg: number | null;
@@ -58,7 +59,7 @@ function computeLocalDashboard(): Array<{ group: Record<string, unknown>; target
       g.id as group_id, g.name as group_name,
       g.sla_latency_ms, g.sla_jitter_ms, g.sla_loss_pct,
       g.viz_latency_min, g.viz_latency_max,
-      t.id as target_id, t.name as target_name, t.host, t.site_code,
+      t.id as target_id, t.name as target_name, t.host, t.site_code, t.probe_type,
       m.timestamp, m.latency_min, m.latency_avg, m.latency_max,
       m.jitter, m.loss_pct, m.sla_score,
       ts.latency_min_lifetime, ts.latency_max_lifetime, ts.sample_count
@@ -95,6 +96,7 @@ function computeLocalDashboard(): Array<{ group: Record<string, unknown>; target
       name: row.target_name,
       host: row.host,
       site_code: row.site_code,
+      probe_type: row.probe_type || 'icmp',
       timestamp: row.timestamp,
       latency_min: row.latency_min,
       latency_avg: row.latency_avg,
@@ -160,10 +162,10 @@ router.get('/peer-view', (req: Request, res: Response) => {
   });
 });
 
-// Aggregated dashboard — local view plus a parallel fetch of every enabled
-// peer's /peer-view. The frontend renders one chart pane per entry.
-router.get('/dashboard/aggregate', async (_req: Request, res: Response) => {
-  const localEntry = {
+interface PeerRow { id: string; name: string; url: string; api_key: string }
+
+function localDashboardNode() {
+  return {
     peer_id: null as string | null,
     peer_name: null as string | null,
     url: null as string | null,
@@ -172,62 +174,101 @@ router.get('/dashboard/aggregate', async (_req: Request, res: Response) => {
     last_seen: Math.floor(Date.now() / 1000),
     error: null as string | null,
   };
+}
 
-  interface PeerRow { id: string; name: string; url: string; api_key: string }
+// Fetch a single peer's /peer-view and shape it into a DashboardNode.
+// Failures (peer down, bad key) resolve to an entry with `error` set rather
+// than throwing, so one slow/dead peer never breaks the dashboard.
+async function fetchPeerNode(peer: PeerRow) {
   const db = getDb();
-  const peers = db.prepare(
+  try {
+    const url = `${peer.url.replace(/\/$/, '')}/api/v1/peer-view`;
+    const response = await fetch(url, {
+      headers: { 'X-API-Key': (peer.api_key || '').trim() },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      // Read the body if possible so the operator sees the peer's
+      // own error message, not just an opaque HTTP code.
+      let body: string | null = null;
+      try {
+        const j = await response.json() as { error?: string };
+        body = j?.error || null;
+      } catch { /* not JSON */ }
+      throw new Error(`HTTP ${response.status}${body ? ` — ${body}` : ''}`);
+    }
+    const data = await response.json() as { site_name?: string; dashboard?: unknown; timestamp?: number };
+    try {
+      db.prepare('UPDATE peers SET last_seen = ?, last_error = NULL WHERE id = ?')
+        .run(Math.floor(Date.now() / 1000), peer.id);
+    } catch { /* ignore */ }
+    return {
+      peer_id: peer.id,
+      peer_name: peer.name,
+      url: peer.url,
+      site_name: data.site_name || peer.name,
+      dashboard: data.dashboard || [],
+      last_seen: data.timestamp || Math.floor(Date.now() / 1000),
+      error: null as string | null,
+    };
+  } catch (err) {
+    const message = (err as Error).message || 'fetch failed';
+    try {
+      db.prepare('UPDATE peers SET last_error = ? WHERE id = ?').run(message, peer.id);
+    } catch { /* ignore */ }
+    return {
+      peer_id: peer.id,
+      peer_name: peer.name,
+      url: peer.url,
+      site_name: peer.name,
+      dashboard: [] as unknown[],
+      last_seen: null as number | null,
+      error: message,
+    };
+  }
+}
+
+function enabledPullPeers(): PeerRow[] {
+  const db = getDb();
+  return db.prepare(
     "SELECT id, name, url, api_key FROM peers WHERE enabled = 1 AND (direction = 'pull' OR direction = 'both')"
   ).all() as PeerRow[];
+}
 
-  const peerEntries = await Promise.all(peers.map(async (peer) => {
-    try {
-      const url = `${peer.url.replace(/\/$/, '')}/api/v1/peer-view`;
-      const response = await fetch(url, {
-        headers: { 'X-API-Key': (peer.api_key || '').trim() },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!response.ok) {
-        // Read the body if possible so the operator sees the peer's
-        // own error message, not just an opaque HTTP code.
-        let body: string | null = null;
-        try {
-          const j = await response.json() as { error?: string };
-          body = j?.error || null;
-        } catch { /* not JSON */ }
-        throw new Error(`HTTP ${response.status}${body ? ` — ${body}` : ''}`);
-      }
-      const data = await response.json() as { site_name?: string; dashboard?: unknown; timestamp?: number };
-      try {
-        db.prepare('UPDATE peers SET last_seen = ?, last_error = NULL WHERE id = ?')
-          .run(Math.floor(Date.now() / 1000), peer.id);
-      } catch { /* ignore */ }
-      return {
-        peer_id: peer.id,
-        peer_name: peer.name,
-        url: peer.url,
-        site_name: data.site_name || peer.name,
-        dashboard: data.dashboard || [],
-        last_seen: data.timestamp || Math.floor(Date.now() / 1000),
-        error: null,
-      };
-    } catch (err) {
-      const message = (err as Error).message || 'fetch failed';
-      try {
-        db.prepare('UPDATE peers SET last_error = ? WHERE id = ?').run(message, peer.id);
-      } catch { /* ignore */ }
-      return {
-        peer_id: peer.id,
-        peer_name: peer.name,
-        url: peer.url,
-        site_name: peer.name,
-        dashboard: [],
-        last_seen: null,
-        error: message,
-      };
-    }
-  }));
+// Local-only dashboard node. Always fast (no network), so the frontend can
+// paint the local radar instantly and load peers lazily afterwards.
+router.get('/dashboard/local', (_req: Request, res: Response) => {
+  res.json(localDashboardNode());
+});
 
-  res.json([localEntry, ...peerEntries]);
+// Stub list of peers to render as panes — id/name/url only, no network
+// round-trip. The frontend fetches each peer's data separately so a slow
+// or unreachable peer shows its own placeholder instead of stalling the
+// whole page.
+router.get('/dashboard/peers', (_req: Request, res: Response) => {
+  const peers = enabledPullPeers();
+  res.json(peers.map(p => ({ peer_id: p.id, peer_name: p.name, url: p.url })));
+});
+
+// Live data for a single peer pane. Constrained to the same enabled +
+// pull/both predicate as enabledPullPeers() so a disabled or push-only peer
+// can't be force-contacted via its (publicly listed) id.
+router.get('/dashboard/peer/:id', async (req: Request, res: Response) => {
+  const db = getDb();
+  const peer = db.prepare(
+    "SELECT id, name, url, api_key FROM peers WHERE id = ? AND enabled = 1 AND (direction = 'pull' OR direction = 'both')"
+  ).get(req.params.id) as PeerRow | undefined;
+  if (!peer) return res.status(404).json({ error: 'Peer not found' });
+  res.json(await fetchPeerNode(peer));
+});
+
+// Aggregated dashboard — local view plus a parallel fetch of every enabled
+// peer's /peer-view. Kept for back-compat and API consumers; the in-app
+// dashboard now uses the split /dashboard/local + /dashboard/peer/:id
+// endpoints so one dead peer can't block the render.
+router.get('/dashboard/aggregate', async (_req: Request, res: Response) => {
+  const peerEntries = await Promise.all(enabledPullPeers().map(fetchPeerNode));
+  res.json([localDashboardNode(), ...peerEntries]);
 });
 
 // API key management. We always create keys with 'admin' permissions

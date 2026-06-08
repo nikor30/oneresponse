@@ -59,6 +59,13 @@ export default function DartChartTooltip({ target, groupName, x, y }: Props) {
     <div style={styles.container(x, y)}>
       <div style={styles.title}>
         {target.name} {target.site_code && <span style={{ color: '#e94560' }}>({target.site_code})</span>}
+        {target.probe_type === 'cisco-ipsla' && (
+          <span style={{
+            marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px',
+            borderRadius: 4, background: 'rgba(6,182,212,0.18)', color: '#22d3ee',
+            border: '1px solid #06b6d4',
+          }}>IP SLA</span>
+        )}
       </div>
       <div><span style={styles.label}>Group:</span> <span style={styles.value}>{groupName}</span></div>
       <div><span style={styles.label}>Host:</span> <span style={styles.value}>{target.host}</span></div>
