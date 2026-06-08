@@ -112,7 +112,7 @@ export default function GroupManager() {
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
           {editingId ? 'Edit group' : 'Add a group'}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px 100px 100px', gap: 10, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, alignItems: 'end' }}>
           <div>
             <label style={fieldLabel}>Name</label>
             <input style={{ ...inputStyle, width: '100%' }} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
@@ -139,7 +139,7 @@ export default function GroupManager() {
           <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 8 }}>
             Chart range (visualization only — leave blank for default)
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '180px 180px 1fr', gap: 10, alignItems: 'end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, alignItems: 'end' }}>
             <div>
               <label style={fieldLabel}>Center value (ms)</label>
               <input

@@ -94,3 +94,64 @@ describe('POST /api/v1/targets validation', () => {
     expect(r.body.probe_type).toBe('icmp');
   });
 });
+
+describe('bulk target operations', () => {
+  function seedTargets(ids: string[], groupId = 'g1') {
+    const db = getDb();
+    const stmt = db.prepare(
+      "INSERT INTO targets (id, group_id, name, host, enabled, probe_type) VALUES (?, ?, ?, ?, 1, 'icmp')"
+    );
+    for (const id of ids) stmt.run(id, groupId, id, '8.8.8.8');
+  }
+
+  it('bulk/delete removes many targets at once', async () => {
+    const db = getDb();
+    db.prepare('INSERT INTO groups (id, name) VALUES (?, ?)').run('g1', 'G');
+    seedTargets(['a', 'b', 'c']);
+
+    const r = await request(app).post('/api/v1/targets/bulk/delete').send({ ids: ['a', 'b'] });
+    expect(r.status).toBe(200);
+    expect(r.body.deleted).toBe(2);
+
+    const remaining = db.prepare('SELECT id FROM targets ORDER BY id').all() as { id: string }[];
+    expect(remaining.map(t => t.id)).toEqual(['c']);
+  });
+
+  it('bulk/delete rejects an empty ids array', async () => {
+    const r = await request(app).post('/api/v1/targets/bulk/delete').send({ ids: [] });
+    expect(r.status).toBe(400);
+  });
+
+  it('bulk/update applies enabled + group changes to many targets', async () => {
+    const db = getDb();
+    db.prepare('INSERT INTO groups (id, name) VALUES (?, ?)').run('g1', 'G1');
+    db.prepare('INSERT INTO groups (id, name) VALUES (?, ?)').run('g2', 'G2');
+    seedTargets(['a', 'b']);
+
+    const r = await request(app).post('/api/v1/targets/bulk/update')
+      .send({ ids: ['a', 'b'], patch: { enabled: 0, group_id: 'g2' } });
+    expect(r.status).toBe(200);
+    expect(r.body.updated).toBe(2);
+
+    const rows = db.prepare('SELECT enabled, group_id FROM targets').all() as { enabled: number; group_id: string }[];
+    expect(rows.every(t => t.enabled === 0 && t.group_id === 'g2')).toBe(true);
+  });
+
+  it('bulk/update rejects an invalid group_id', async () => {
+    const db = getDb();
+    db.prepare('INSERT INTO groups (id, name) VALUES (?, ?)').run('g1', 'G');
+    seedTargets(['a']);
+    const r = await request(app).post('/api/v1/targets/bulk/update')
+      .send({ ids: ['a'], patch: { group_id: 'nope' } });
+    expect(r.status).toBe(400);
+  });
+
+  it('bulk/update rejects a patch with no editable fields', async () => {
+    const db = getDb();
+    db.prepare('INSERT INTO groups (id, name) VALUES (?, ?)').run('g1', 'G');
+    seedTargets(['a']);
+    const r = await request(app).post('/api/v1/targets/bulk/update')
+      .send({ ids: ['a'], patch: { name: 'hax', probe_type: 'cisco-ipsla' } });
+    expect(r.status).toBe(400);
+  });
+});

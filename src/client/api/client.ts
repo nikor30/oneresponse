@@ -125,6 +125,7 @@ export interface DashboardTarget {
   name: string;
   host: string;
   site_code: string | null;
+  probe_type: 'icmp' | 'cisco-ipsla';
   timestamp: number | null;
   latency_min: number | null;
   latency_avg: number | null;
@@ -162,6 +163,15 @@ export interface DashboardNode {
   dashboard: DashboardGroup[];
   last_seen: number | null;
   error: string | null;
+}
+
+// Lightweight peer descriptor for the dashboard — no data fetched yet, so
+// the frontend can render a placeholder pane immediately and load each
+// peer's data on its own.
+export interface DashboardPeerStub {
+  peer_id: string;
+  peer_name: string;
+  url: string;
 }
 
 export interface Peer {
@@ -207,6 +217,11 @@ export const api = {
   // Dashboard
   getDashboard: () => request<DashboardGroup[]>('/dashboard'),
   getDashboardAggregate: () => request<DashboardNode[]>('/dashboard/aggregate'),
+  // Split endpoints so an unreachable peer never blocks the page: the local
+  // radar paints immediately, then each peer pane loads independently.
+  getDashboardLocal: () => request<DashboardNode>('/dashboard/local'),
+  getDashboardPeers: () => request<DashboardPeerStub[]>('/dashboard/peers'),
+  getDashboardPeer: (id: string) => request<DashboardNode>(`/dashboard/peer/${id}`),
 
   // Groups
   getGroups: () => request<Group[]>('/groups'),
@@ -220,6 +235,11 @@ export const api = {
   createTarget: (data: Partial<Target>) => request<Target>('/targets', { method: 'POST', body: JSON.stringify(data) }),
   updateTarget: (id: string, data: Partial<Target>) => request<Target>(`/targets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteTarget: (id: string) => request<void>(`/targets/${id}`, { method: 'DELETE' }),
+  // Bulk operations for the multi-select target table.
+  bulkDeleteTargets: (ids: string[]) =>
+    request<{ deleted: number }>('/targets/bulk/delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+  bulkUpdateTargets: (ids: string[], patch: Partial<Pick<Target, 'enabled' | 'group_id' | 'probe_interval' | 'probe_count'>>) =>
+    request<{ updated: number }>('/targets/bulk/update', { method: 'POST', body: JSON.stringify({ ids, patch }) }),
 
   // Measurements
   getMeasurements: (targetId: string, from?: number, to?: number, bucket?: number) => {

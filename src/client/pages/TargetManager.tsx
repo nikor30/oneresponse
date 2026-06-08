@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { api, type Target, type Group, type CiscoDevice, type DiscoveredOperation } from '../api/client';
 import CsvIO from '../components/CsvIO';
 
@@ -26,6 +26,7 @@ const emptyForm: Form = {
 };
 
 export default function TargetManager() {
+  const [tab, setTab] = useState<ProbeType>('icmp');
   const [targets, setTargets] = useState<Target[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [devices, setDevices] = useState<CiscoDevice[]>([]);
@@ -34,6 +35,11 @@ export default function TargetManager() {
   const [form, setForm] = useState<Form>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  // Multi-select state — set of target ids ticked in the current tab's table.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkGroup, setBulkGroup] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = async () => {
     const [t, g, d] = await Promise.all([api.getTargets(), api.getGroups(), api.getDevices().catch(() => [] as CiscoDevice[])]);
@@ -57,11 +63,37 @@ export default function TargetManager() {
       .finally(() => setOpsLoading(false));
   }, [form.probe_type, form.device_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Targets visible in the active tab.
+  const visibleTargets = useMemo(
+    () => targets.filter(t => (t.probe_type || 'icmp') === tab),
+    [targets, tab]
+  );
+
+  const isCisco = tab === 'cisco-ipsla';
+
+  const resetForm = (nextTab: ProbeType = tab) => {
+    setEditingId(null);
+    setForm({
+      ...emptyForm,
+      group_id: form.group_id || (groups[0]?.id ?? ''),
+      probe_type: nextTab,
+      device_id: nextTab === 'cisco-ipsla' ? (devices[0]?.id ?? null) : null,
+    });
+  };
+
+  const switchTab = (next: ProbeType) => {
+    if (next === tab) return;
+    setTab(next);
+    setSelected(new Set());
+    setError('');
+    resetForm(next);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
-      const payload = { ...form };
+      const payload = { ...form, probe_type: tab };
       if (payload.probe_type === 'icmp') {
         payload.device_id = null;
         payload.ipsla_oper_index = null;
@@ -72,8 +104,7 @@ export default function TargetManager() {
       } else {
         await api.createTarget(payload);
       }
-      setForm({ ...emptyForm, group_id: form.group_id });
-      setEditingId(null);
+      resetForm();
       void load();
     } catch (err) {
       setError((err as Error).message);
@@ -81,11 +112,13 @@ export default function TargetManager() {
   };
 
   const handleEdit = (t: Target) => {
+    const tType = (t.probe_type || 'icmp') as ProbeType;
+    if (tType !== tab) setTab(tType);
     setEditingId(t.id);
     setForm({
       group_id: t.group_id, name: t.name, host: t.host, site_code: t.site_code || '',
       probe_interval: t.probe_interval, probe_count: t.probe_count, enabled: t.enabled,
-      probe_type: t.probe_type || 'icmp',
+      probe_type: tType,
       device_id: t.device_id,
       ipsla_oper_index: t.ipsla_oper_index,
       ipsla_oper_type: t.ipsla_oper_type,
@@ -95,13 +128,53 @@ export default function TargetManager() {
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this target and all its measurements?')) return;
     await api.deleteTarget(id);
+    setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     void load();
+  };
+
+  // --- multi-select helpers ---------------------------------------------
+  const allVisibleSelected = visibleTargets.length > 0 && visibleTargets.every(t => selected.has(t.id));
+  const toggleOne = (id: string) => setSelected(prev => {
+    const n = new Set(prev);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+  const toggleAll = () => setSelected(prev => {
+    if (visibleTargets.every(t => prev.has(t.id))) return new Set();
+    return new Set(visibleTargets.map(t => t.id));
+  });
+
+  const selectedIds = useMemo(
+    () => visibleTargets.filter(t => selected.has(t.id)).map(t => t.id),
+    [visibleTargets, selected]
+  );
+
+  const runBulk = async (fn: () => Promise<unknown>) => {
+    setBulkBusy(true);
+    setError('');
+    try {
+      await fn();
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkEnable = (enabled: number) => runBulk(() => api.bulkUpdateTargets(selectedIds, { enabled }));
+  const bulkMove = () => {
+    if (!bulkGroup) return;
+    return runBulk(() => api.bulkUpdateTargets(selectedIds, { group_id: bulkGroup }));
+  };
+  const bulkDelete = () => {
+    if (!confirm(`Delete ${selectedIds.length} target(s) and all their measurements?`)) return;
+    return runBulk(() => api.bulkDeleteTargets(selectedIds));
   };
 
   const groupMap = new Map(groups.map(g => [g.id, g.name]));
   const deviceMap = new Map(devices.map(d => [d.id, d.name]));
-
-  const isCisco = form.probe_type === 'cisco-ipsla';
   const opsForDevice = (form.device_id ? opsByDevice[form.device_id] : null) || [];
 
   return (
@@ -116,6 +189,16 @@ export default function TargetManager() {
         />
       </div>
 
+      {/* Tabs: local ICMP probes vs Cisco IP SLA device operations */}
+      <div role="tablist" style={tabBar}>
+        <TabButton active={tab === 'icmp'} onClick={() => switchTab('icmp')}>
+          Local (ICMP) <Count n={targets.filter(t => (t.probe_type || 'icmp') === 'icmp').length} />
+        </TabButton>
+        <TabButton active={tab === 'cisco-ipsla'} onClick={() => switchTab('cisco-ipsla')} accent="#06b6d4">
+          IP SLA (Cisco) <Count n={targets.filter(t => t.probe_type === 'cisco-ipsla').length} />
+        </TabButton>
+      </div>
+
       {groups.length === 0 && (
         <div style={{
           padding: 16, background: 'rgba(234,179,8,0.12)',
@@ -126,12 +209,22 @@ export default function TargetManager() {
         </div>
       )}
 
+      {isCisco && devices.length === 0 && (
+        <div style={{
+          padding: 16, background: 'rgba(6,182,212,0.10)',
+          border: '1px solid rgba(6,182,212,0.4)', color: 'var(--text)',
+          borderRadius: 8, marginBottom: 16, fontSize: 13,
+        }}>
+          Add a <a href="/devices" style={{ color: 'var(--accent)' }}>Cisco device</a> first, then its IP SLA operations can be added here.
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} style={cardStyle}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
-          {editingId ? 'Edit target' : 'Add a target'}
+          {editingId ? 'Edit target' : isCisco ? 'Add an IP SLA target' : 'Add a local target'}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 150px 80px 80px', gap: 10, alignItems: 'end' }}>
+        <div style={formGrid}>
           <Field label="Group">
             <select style={input} value={form.group_id} onChange={e => setForm({ ...form, group_id: e.target.value })} required>
               {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -149,33 +242,11 @@ export default function TargetManager() {
           <Field label="Pings">
             <input type="number" style={input} value={form.probe_count} onChange={e => setForm({ ...form, probe_count: +e.target.value })} />
           </Field>
-        </div>
-
-        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--border)', display: 'grid', gridTemplateColumns: '180px 1fr 220px 160px', gap: 10, alignItems: 'end' }}>
-          <Field label="Probe source">
-            <select
-              style={input}
-              value={form.probe_type}
-              onChange={e => setForm({
-                ...form,
-                probe_type: e.target.value as ProbeType,
-                device_id: e.target.value === 'cisco-ipsla' ? (devices[0]?.id ?? null) : null,
-                ipsla_oper_index: null,
-                ipsla_oper_type: null,
-              })}
-            >
-              <option value="icmp">ICMP (local probe)</option>
-              <option value="cisco-ipsla">Cisco IP SLA (device)</option>
-            </select>
-          </Field>
 
           {!isCisco ? (
-            <>
-              <Field label="Host (IP / hostname)">
-                <input style={input} value={form.host} onChange={e => setForm({ ...form, host: e.target.value })} required placeholder="8.8.8.8" />
-              </Field>
-              <div /><div />
-            </>
+            <Field label="Host (IP / hostname)">
+              <input style={input} value={form.host} onChange={e => setForm({ ...form, host: e.target.value })} required placeholder="8.8.8.8" />
+            </Field>
           ) : (
             <>
               <Field label="Cisco device" hint={devices.length === 0 ? 'Add a device on the Cisco devices page first' : undefined}>
@@ -214,17 +285,17 @@ export default function TargetManager() {
                   ))}
                 </select>
               </Field>
-              <div /></>
+            </>
           )}
         </div>
 
-        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="submit" style={{ ...btnStyle, background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-            {editingId ? 'Update' : 'Add Target'}
+            {editingId ? 'Update' : isCisco ? 'Add IP SLA Target' : 'Add Target'}
           </button>
           {editingId && (
             <button type="button" style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)' }}
-              onClick={() => { setEditingId(null); setForm({ ...emptyForm, group_id: form.group_id }); }}>
+              onClick={() => resetForm()}>
               Cancel
             </button>
           )}
@@ -232,51 +303,76 @@ export default function TargetManager() {
         {error && <div style={{ color: '#dc2626', marginTop: 8, fontSize: 13 }}>{error}</div>}
       </form>
 
-      <table style={tableStyle}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid var(--border)' }}>
-            <th style={th}>Name</th>
-            <th style={th}>Source</th>
-            <th style={th}>Host / Operation</th>
-            <th style={th}>Group</th>
-            <th style={{ ...th, textAlign: 'right' }}>Interval</th>
-            <th style={{ ...th, textAlign: 'center' }}>Enabled</th>
-            <th style={{ ...th, textAlign: 'right' }}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {targets.map(t => (
-            <tr key={t.id} style={{ borderBottom: '1px solid var(--border)' }}>
-              <td style={{ ...td, fontWeight: 600 }}>
-                <a href={`/targets/${t.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{t.name}</a>
-              </td>
-              <td style={td}>
-                {t.probe_type === 'cisco-ipsla' ? (
-                  <span title="Cisco IP SLA via SNMP" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#0ea5e9' }} />
-                    cisco-ipsla
-                  </span>
-                ) : 'icmp'}
-              </td>
-              <td style={{ ...td, fontFamily: 'monospace', fontSize: 12 }}>
-                {t.probe_type === 'cisco-ipsla'
-                  ? `${deviceMap.get(t.device_id || '') || '?'} · op #${t.ipsla_oper_index} (${t.ipsla_oper_type})`
-                  : t.host}
-              </td>
-              <td style={td}>{groupMap.get(t.group_id) || '?'}</td>
-              <td style={{ ...td, textAlign: 'right' }}>{t.probe_interval}s</td>
-              <td style={{ ...td, textAlign: 'center' }}>{t.enabled ? 'Yes' : 'No'}</td>
-              <td style={{ ...td, textAlign: 'right' }}>
-                <button onClick={() => handleEdit(t)} style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)', marginRight: 4, fontSize: 12 }}>Edit</button>
-                <button onClick={() => handleDelete(t.id)} style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}>Delete</button>
-              </td>
+      {/* Bulk action bar — only visible when rows are selected */}
+      {selectedIds.length > 0 && (
+        <div style={bulkBar}>
+          <strong style={{ fontSize: 13 }}>{selectedIds.length} selected</strong>
+          <button disabled={bulkBusy} style={bulkBtn} onClick={() => bulkEnable(1)}>Enable</button>
+          <button disabled={bulkBusy} style={bulkBtn} onClick={() => bulkEnable(0)}>Disable</button>
+          <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <select style={{ ...input, width: 'auto', minWidth: 130 }} value={bulkGroup} onChange={e => setBulkGroup(e.target.value)}>
+              <option value="">Move to group…</option>
+              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+            <button disabled={bulkBusy || !bulkGroup} style={bulkBtn} onClick={bulkMove}>Apply</button>
+          </span>
+          <button disabled={bulkBusy} style={{ ...bulkBtn, background: '#fee', color: '#dc2626', borderColor: 'rgba(220,38,38,0.3)' }} onClick={bulkDelete}>
+            Delete selected
+          </button>
+          <button disabled={bulkBusy} style={{ ...bulkBtn, marginLeft: 'auto' }} onClick={() => setSelected(new Set())}>Clear</button>
+        </div>
+      )}
+
+      <div className="or-table-wrap" style={{ borderRadius: 8, boxShadow: 'var(--shadow)', border: '1px solid var(--border)' }}>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid var(--border)' }}>
+              <th style={{ ...th, width: 36 }}>
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} aria-label="Select all" />
+              </th>
+              <th style={th}>Name</th>
+              <th style={th}>{isCisco ? 'Device / Operation' : 'Host'}</th>
+              <th style={th}>Group</th>
+              <th style={{ ...th, textAlign: 'right' }}>Interval</th>
+              <th style={{ ...th, textAlign: 'center' }}>Enabled</th>
+              <th style={{ ...th, textAlign: 'right' }}>Actions</th>
             </tr>
-          ))}
-          {targets.length === 0 && (
-            <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>No targets yet. Add one above.</td></tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {visibleTargets.map(t => {
+              const checked = selected.has(t.id);
+              return (
+                <tr key={t.id} style={{ borderBottom: '1px solid var(--border)', background: checked ? 'var(--bg-hover)' : undefined }}>
+                  <td style={td}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleOne(t.id)} aria-label={`Select ${t.name}`} />
+                  </td>
+                  <td style={{ ...td, fontWeight: 600 }}>
+                    <a href={`/targets/${t.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{t.name}</a>
+                    {t.site_code && <span style={{ color: 'var(--text-dim)', fontWeight: 400, marginLeft: 6, fontSize: 12 }}>{t.site_code}</span>}
+                  </td>
+                  <td style={{ ...td, fontFamily: 'monospace', fontSize: 12 }}>
+                    {isCisco
+                      ? `${deviceMap.get(t.device_id || '') || '?'} · op #${t.ipsla_oper_index} (${t.ipsla_oper_type})`
+                      : t.host}
+                  </td>
+                  <td style={td}>{groupMap.get(t.group_id) || '?'}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{t.probe_interval}s</td>
+                  <td style={{ ...td, textAlign: 'center' }}>{t.enabled ? 'Yes' : 'No'}</td>
+                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => handleEdit(t)} style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)', marginRight: 4, fontSize: 12 }}>Edit</button>
+                    <button onClick={() => handleDelete(t.id)} style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}>Delete</button>
+                  </td>
+                </tr>
+              );
+            })}
+            {visibleTargets.length === 0 && (
+              <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)' }}>
+                No {isCisco ? 'IP SLA' : 'local'} targets yet. Add one above.
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -294,8 +390,62 @@ const th: React.CSSProperties = { padding: '10px 16px', textAlign: 'left', fontS
 const td: React.CSSProperties = { padding: '10px 16px', color: 'var(--text)' };
 const tableStyle: React.CSSProperties = {
   width: '100%', background: 'var(--bg-card)', color: 'var(--text)',
-  borderRadius: 8, boxShadow: 'var(--shadow)', border: '1px solid var(--border)', borderCollapse: 'collapse',
+  borderCollapse: 'collapse', minWidth: 640,
 };
+// Responsive form grid — columns flow and wrap instead of fixed px widths,
+// so the form stays usable from phone to widescreen.
+const formGrid: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+  gap: 10,
+  alignItems: 'end',
+};
+const tabBar: React.CSSProperties = {
+  display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--border)',
+  flexWrap: 'wrap',
+};
+const bulkBar: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
+  padding: '10px 14px', marginBottom: 12, boxShadow: 'var(--shadow)',
+};
+const bulkBtn: React.CSSProperties = {
+  padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 6,
+  background: 'var(--bg-hover)', color: 'var(--text)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+};
+
+function TabButton({ active, accent, onClick, children }: { active: boolean; accent?: string; onClick: () => void; children: React.ReactNode }) {
+  const color = accent || 'var(--accent)';
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      style={{
+        padding: '10px 18px',
+        border: 'none',
+        borderBottom: `3px solid ${active ? color : 'transparent'}`,
+        background: 'transparent',
+        color: active ? 'var(--text)' : 'var(--text-muted)',
+        fontSize: 14,
+        fontWeight: active ? 700 : 500,
+        cursor: 'pointer',
+        marginBottom: -1,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Count({ n }: { n: number }) {
+  return (
+    <span style={{
+      marginLeft: 6, fontSize: 11, fontWeight: 700, padding: '1px 7px',
+      borderRadius: 10, background: 'var(--bg-hover)', color: 'var(--text-muted)',
+    }}>{n}</span>
+  );
+}
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

@@ -96,7 +96,7 @@ export default function Top10Page() {
       <div style={{
         display: 'grid',
         gap: 24,
-        gridTemplateColumns: 'repeat(auto-fit, minmax(560px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 560px), 1fr))',
       }}>
         <RankingTable
           title="Best performing"

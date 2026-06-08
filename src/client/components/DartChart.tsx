@@ -150,6 +150,7 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
     // -----------------------------------------------------------------
     const RED  = '#d80027';
     const GREEN = '#00a644';
+    const CYAN = '#06b6d4'; // Cisco IP SLA accent — distinguishes device-sourced points
     const SLA_RING_R = radius * 0.7;
 
     // Outer red disc
@@ -392,15 +393,25 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
         const angle = startAngle + targetAngleStep * (tIdx + 1);
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
+        const isIpsla = target.probe_type === 'cisco-ipsla';
 
         // No data yet
         if (target.latency_avg == null) {
           const r = SLA_RING_R;
+          if (isIpsla) {
+            // Cyan ring marks this as a Cisco IP SLA point even before data.
+            g.append('circle')
+              .attr('cx', cos * r).attr('cy', sin * r)
+              .attr('r', 8)
+              .attr('fill', 'none')
+              .attr('stroke', CYAN)
+              .attr('stroke-width', 2);
+          }
           g.append('circle')
             .attr('cx', cos * r).attr('cy', sin * r)
             .attr('r', 5)
             .attr('fill', '#ffffff')
-            .attr('stroke', '#475569')
+            .attr('stroke', isIpsla ? CYAN : '#475569')
             .attr('stroke-dasharray', '2,2');
           return;
         }
@@ -474,6 +485,18 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
           .attr('fill', dotFill)
           .attr('opacity', 0.14)
           .style('pointer-events', 'none');
+        // Cisco IP SLA marker — a cyan ring around the dot so device-sourced
+        // points are instantly distinguishable from local ICMP probes.
+        if (isIpsla) {
+          dotGroup.append('circle')
+            .attr('cx', dotX).attr('cy', dotY)
+            .attr('r', 10.5)
+            .attr('fill', 'none')
+            .attr('stroke', CYAN)
+            .attr('stroke-width', 2.2)
+            .attr('opacity', 0.95)
+            .style('pointer-events', 'none');
+        }
         // Translucent dot — 50% opacity status indicator; hover shows
         // tooltip but click does nothing (labels are the click target).
         const dot = dotGroup.append('circle')
@@ -543,16 +566,22 @@ export default function DartChart({ data, onTargetClick, selectedGroup, showLabe
     // -----------------------------------------------------------------
     // Legend
     // -----------------------------------------------------------------
-    const legend = svg.append('g').attr('transform', `translate(${size - 220}, ${size - 70})`);
-    const legendItems: { color: string; label: string; shape: 'circle' | 'line' }[] = [
+    const legend = svg.append('g').attr('transform', `translate(${size - 220}, ${size - 88})`);
+    const legendItems: { color: string; label: string; shape: 'circle' | 'line' | 'ring' }[] = [
       { color: '#0a7e36', label: 'SLA compliant', shape: 'circle' },
       { color: '#a30019', label: 'SLA breached', shape: 'circle' },
+      { color: CYAN, label: 'Cisco IP SLA', shape: 'ring' },
       { color: '#0f172a', label: 'Min ↔ max latency drift', shape: 'line' },
     ];
     legendItems.forEach((it, i) => {
       const row = legend.append('g').attr('transform', `translate(0, ${i * 18})`);
       if (it.shape === 'circle') {
         row.append('circle').attr('cx', 7).attr('cy', 7).attr('r', 5.5).attr('fill', it.color);
+      } else if (it.shape === 'ring') {
+        // Filled dot wrapped in the cyan IP SLA ring, mirroring the chart.
+        row.append('circle').attr('cx', 7).attr('cy', 7).attr('r', 6.5)
+          .attr('fill', 'none').attr('stroke', it.color).attr('stroke-width', 2);
+        row.append('circle').attr('cx', 7).attr('cy', 7).attr('r', 3).attr('fill', 'var(--text-muted)');
       } else {
         // Drift legend swatch — use theme variables so the dark dot at the
         // end remains visible against the dark card background.

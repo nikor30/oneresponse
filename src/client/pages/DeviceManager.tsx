@@ -176,7 +176,7 @@ export default function DeviceManager() {
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>
           {editingId ? 'Edit device' : 'Add a device'}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px 110px 120px', gap: 10, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, alignItems: 'end' }}>
           <Field label="Name">
             <input style={input} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
           </Field>
@@ -204,7 +204,7 @@ export default function DeviceManager() {
             </Field>
           </div>
         ) : (
-          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 100px 1fr 100px 1fr', gap: 10 }}>
+          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
             <Field label="Username"><input style={input} value={form.v3_username} onChange={e => setForm({ ...form, v3_username: e.target.value })} /></Field>
             <Field label="Auth proto">
               <select style={input} value={form.v3_auth_protocol} onChange={e => setForm({ ...form, v3_auth_protocol: e.target.value })}>

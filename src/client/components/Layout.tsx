@@ -86,7 +86,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <header style={styles.header}>
+      <header className="app-header" style={styles.header}>
         <div style={styles.left}>
           <Link to="/" style={styles.logo}>oneresponse</Link>
           <Link to="/" style={styles.dashLink(location.pathname === '/')}>
@@ -114,7 +114,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </header>
-      <main style={styles.main}>{children}</main>
+      <main className="app-main" style={styles.main}>{children}</main>
       <SettingsDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} canEdit={canEdit} />
       <LoginModal
         open={loginOpen}
