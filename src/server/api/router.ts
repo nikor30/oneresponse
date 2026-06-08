@@ -250,11 +250,13 @@ router.get('/dashboard/peers', (_req: Request, res: Response) => {
   res.json(peers.map(p => ({ peer_id: p.id, peer_name: p.name, url: p.url })));
 });
 
-// Live data for a single peer pane.
+// Live data for a single peer pane. Constrained to the same enabled +
+// pull/both predicate as enabledPullPeers() so a disabled or push-only peer
+// can't be force-contacted via its (publicly listed) id.
 router.get('/dashboard/peer/:id', async (req: Request, res: Response) => {
   const db = getDb();
   const peer = db.prepare(
-    'SELECT id, name, url, api_key FROM peers WHERE id = ?'
+    "SELECT id, name, url, api_key FROM peers WHERE id = ? AND enabled = 1 AND (direction = 'pull' OR direction = 'both')"
   ).get(req.params.id) as PeerRow | undefined;
   if (!peer) return res.status(404).json({ error: 'Peer not found' });
   res.json(await fetchPeerNode(peer));
