@@ -38,12 +38,107 @@ import {
   RTT_MON_LATEST_JITTER_LOSS_DS,
   RTT_MON_LATEST_JITTER_MIA,
   RTT_MON_LATEST_JITTER_OOS,
+  RTT_MON_LATEST_JITTER_LATE,
   RTT_MON_LATEST_JITTER_SENSE,
+  RTT_MON_LATEST_JITTER_OW_SUM_SD,
+  RTT_MON_LATEST_JITTER_OW_MIN_SD,
+  RTT_MON_LATEST_JITTER_OW_MAX_SD,
+  RTT_MON_LATEST_JITTER_OW_SUM_DS,
+  RTT_MON_LATEST_JITTER_OW_MIN_DS,
+  RTT_MON_LATEST_JITTER_OW_MAX_DS,
+  RTT_MON_LATEST_JITTER_NUM_OW,
   RTT_MON_LATEST_JITTER_MOS,
+  RTT_MON_LATEST_JITTER_ICPIF,
   isSenseOk,
   rttTypeToOperKind,
   type OperKind,
 } from './mibConstants.js';
+
+// Everything a udp-jitter poll reads, by name. Keeping this a named map
+// (rather than a positional array) makes it impossible to misalign an
+// OID with the field it feeds.
+export interface JitterValues {
+  numRtt: number | null;
+  rttSum: number | null;
+  rttMin: number | null;
+  rttMax: number | null;
+  numPosSd: number | null;
+  sumPosSd: number | null;
+  numNegSd: number | null;
+  sumNegSd: number | null;
+  numPosDs: number | null;
+  sumPosDs: number | null;
+  numNegDs: number | null;
+  sumNegDs: number | null;
+  lossSd: number | null;
+  lossDs: number | null;
+  oos: number | null;
+  mia: number | null;
+  late: number | null;
+  sense: number | null;
+  owSumSd: number | null;
+  owMinSd: number | null;
+  owMaxSd: number | null;
+  owSumDs: number | null;
+  owMinDs: number | null;
+  owMaxDs: number | null;
+  numOw: number | null;
+  mos: number | null;
+  icpif: number | null;
+}
+
+const JITTER_COLUMNS: Array<[keyof JitterValues, string]> = [
+  ['numRtt',   RTT_MON_LATEST_JITTER_NUM_RTT],
+  ['rttSum',   RTT_MON_LATEST_JITTER_RTT_SUM],
+  ['rttMin',   RTT_MON_LATEST_JITTER_RTT_MIN],
+  ['rttMax',   RTT_MON_LATEST_JITTER_RTT_MAX],
+  ['numPosSd', RTT_MON_LATEST_JITTER_NUM_POS_SD],
+  ['sumPosSd', RTT_MON_LATEST_JITTER_SUM_POS_SD],
+  ['numNegSd', RTT_MON_LATEST_JITTER_NUM_NEG_SD],
+  ['sumNegSd', RTT_MON_LATEST_JITTER_SUM_NEG_SD],
+  ['numPosDs', RTT_MON_LATEST_JITTER_NUM_POS_DS],
+  ['sumPosDs', RTT_MON_LATEST_JITTER_SUM_POS_DS],
+  ['numNegDs', RTT_MON_LATEST_JITTER_NUM_NEG_DS],
+  ['sumNegDs', RTT_MON_LATEST_JITTER_SUM_NEG_DS],
+  ['lossSd',   RTT_MON_LATEST_JITTER_LOSS_SD],
+  ['lossDs',   RTT_MON_LATEST_JITTER_LOSS_DS],
+  ['oos',      RTT_MON_LATEST_JITTER_OOS],
+  ['mia',      RTT_MON_LATEST_JITTER_MIA],
+  ['late',     RTT_MON_LATEST_JITTER_LATE],
+  ['sense',    RTT_MON_LATEST_JITTER_SENSE],
+  ['owSumSd',  RTT_MON_LATEST_JITTER_OW_SUM_SD],
+  ['owMinSd',  RTT_MON_LATEST_JITTER_OW_MIN_SD],
+  ['owMaxSd',  RTT_MON_LATEST_JITTER_OW_MAX_SD],
+  ['owSumDs',  RTT_MON_LATEST_JITTER_OW_SUM_DS],
+  ['owMinDs',  RTT_MON_LATEST_JITTER_OW_MIN_DS],
+  ['owMaxDs',  RTT_MON_LATEST_JITTER_OW_MAX_DS],
+  ['numOw',    RTT_MON_LATEST_JITTER_NUM_OW],
+  ['mos',      RTT_MON_LATEST_JITTER_MOS],
+  ['icpif',    RTT_MON_LATEST_JITTER_ICPIF],
+];
+
+// Extra datapoints only udp-jitter operations produce. Stored as extra
+// nullable columns on measurements and visualized on the target detail
+// page. All latency values are milliseconds; loss/packet fields are raw
+// packet counts for the poll cycle.
+export interface IpSlaExtras {
+  ow_sd_min: number | null;
+  ow_sd_avg: number | null;
+  ow_sd_max: number | null;
+  ow_ds_min: number | null;
+  ow_ds_avg: number | null;
+  ow_ds_max: number | null;
+  jitter_sd: number | null;
+  jitter_ds: number | null;
+  loss_sd: number | null;
+  loss_ds: number | null;
+  pkt_oos: number | null;
+  pkt_mia: number | null;
+  pkt_late: number | null;
+  icpif: number | null;
+}
+
+export type CiscoProbeResult = ProbeResult & { mos?: number | null; ipsla?: IpSlaExtras | null };
 
 // ── Connectivity test ─────────────────────────────────────────────
 export async function testConnection(d: CiscoDeviceConn): Promise<{ ok: boolean; sysName?: string; sysObjectID?: string; error?: string }> {
@@ -111,33 +206,15 @@ export async function pollOperation(
   d: CiscoDeviceConn,
   operIndex: number,
   kind: OperKind,
-): Promise<ProbeResult> {
+): Promise<CiscoProbeResult> {
   cdbg('pollOperation.start', { host: d.host, operIndex, kind });
   if (kind === 'udp-jitter') {
-    const oids = [
-      `${RTT_MON_LATEST_JITTER_NUM_RTT}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_RTT_SUM}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_RTT_MIN}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_RTT_MAX}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_NUM_POS_SD}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_SUM_POS_SD}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_NUM_NEG_SD}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_SUM_NEG_SD}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_NUM_POS_DS}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_SUM_POS_DS}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_NUM_NEG_DS}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_SUM_NEG_DS}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_LOSS_SD}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_LOSS_DS}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_MIA}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_OOS}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_SENSE}.${operIndex}`,
-      `${RTT_MON_LATEST_JITTER_MOS}.${operIndex}`,
-    ];
+    const oids = JITTER_COLUMNS.map(([, oid]) => `${oid}.${operIndex}`);
     const vbs = await snmpGet(d, oids);
-    const nums = vbs.map(asNum);
-    const result = normaliseJitter(nums);
-    cdbg('pollOperation.end', { host: d.host, operIndex, kind, raw: nums, result });
+    const values = {} as JitterValues;
+    JITTER_COLUMNS.forEach(([name], i) => { values[name] = asNum(vbs[i]); });
+    const result = normaliseJitter(values);
+    cdbg('pollOperation.end', { host: d.host, operIndex, kind, raw: values, result });
     return result;
   }
 
@@ -166,7 +243,7 @@ export interface DeviceTarget {
 }
 export interface BatchProbeResult {
   target_id: string;
-  result: ProbeResult & { mos?: number | null };
+  result: CiscoProbeResult;
   error?: string;
 }
 export async function pollAllOperations(d: CiscoDeviceConn, ops: DeviceTarget[]): Promise<BatchProbeResult[]> {
@@ -215,18 +292,15 @@ export function normaliseEcho(completionTimeMs: number | null, sense: number | n
   };
 }
 
-// Layout of jitter() input (in this order, all nullable numbers):
-//   [numRtt, rttSum, rttMin, rttMax,
-//    numPosSd, sumPosSd, numNegSd, sumNegSd,
-//    numPosDs, sumPosDs, numNegDs, sumNegDs,
-//    lossSd, lossDs, mia, oos, sense, mos]
-export function normaliseJitter(v: (number | null)[]): ProbeResult & { mos?: number | null } {
-  const [
+export function normaliseJitter(v: JitterValues): CiscoProbeResult {
+  const {
     numRtt, rttSum, rttMin, rttMax,
     numPosSd, sumPosSd, numNegSd, sumNegSd,
     numPosDs, sumPosDs, numNegDs, sumNegDs,
-    lossSd, lossDs, mia, oos, sense, mosRaw,
-  ] = v;
+    lossSd, lossDs, oos, mia, late, sense,
+    owSumSd, owMinSd, owMaxSd, owSumDs, owMinDs, owMaxDs, numOw,
+    mos: mosRaw, icpif,
+  } = v;
 
   // Reason-trace when we drop the sample. Surfaced via DEBUG_CISCO=1
   // and via the /diagnostics endpoint so the operator immediately
@@ -239,17 +313,23 @@ export function normaliseJitter(v: (number | null)[]): ProbeResult & { mos?: num
           : `numRtt=${numRtt}`,
       sense, numRtt, rttSum, rttMin, rttMax,
     });
-    return { ...downSample(), mos: null };
+    return { ...downSample(), mos: null, ipsla: null };
   }
 
   const min = rttMin ?? 0;
   const max = rttMax ?? 0;
   const avg = rttSum != null ? rttSum / numRtt : 0;
 
-  // Jitter: average absolute jitter across positive/negative SD+DS samples.
-  const jitterSum = (sumPosSd ?? 0) + (sumNegSd ?? 0) + (sumPosDs ?? 0) + (sumNegDs ?? 0);
-  const jitterN = (numPosSd ?? 0) + (numNegSd ?? 0) + (numPosDs ?? 0) + (numNegDs ?? 0);
-  const jitter = jitterN > 0 ? jitterSum / jitterN : 0;
+  // Jitter: average absolute jitter — overall and per direction
+  // (source→destination and destination→source).
+  const mean = (sum: number, n: number) => (n > 0 ? sum / n : null);
+  const sdSum = (sumPosSd ?? 0) + (sumNegSd ?? 0);
+  const sdN   = (numPosSd ?? 0) + (numNegSd ?? 0);
+  const dsSum = (sumPosDs ?? 0) + (sumNegDs ?? 0);
+  const dsN   = (numPosDs ?? 0) + (numNegDs ?? 0);
+  const jitterSd = mean(sdSum, sdN);
+  const jitterDs = mean(dsSum, dsN);
+  const jitter = mean(sdSum + dsSum, sdN + dsN) ?? 0;
 
   // Loss: count source-to-dest + dest-to-source + MIA + out-of-sequence
   // against (numRtt + losses) — i.e. against the total packets the
@@ -261,6 +341,32 @@ export function normaliseJitter(v: (number | null)[]): ProbeResult & { mos?: num
   // MOS is reported * 100 in CISCO-RTTMON-MIB.
   const mos = mosRaw != null && mosRaw > 0 ? mosRaw / 100 : null;
 
+  // One-way latency (needs NTP sync between source and responder —
+  // devices report 0/absent when unsynced, which we keep as null).
+  const owAvg = (sum: number | null) =>
+    sum != null && numOw != null && numOw > 0 ? sum / numOw : null;
+  const hasOwSd = numOw != null && numOw > 0 && (owSumSd ?? 0) > 0;
+  const hasOwDs = numOw != null && numOw > 0 && (owSumDs ?? 0) > 0;
+
+  const round3 = (x: number | null) => (x == null ? null : Math.round(x * 1000) / 1000);
+
+  const ipsla: IpSlaExtras = {
+    ow_sd_min: hasOwSd ? owMinSd : null,
+    ow_sd_avg: hasOwSd ? round3(owAvg(owSumSd)) : null,
+    ow_sd_max: hasOwSd ? owMaxSd : null,
+    ow_ds_min: hasOwDs ? owMinDs : null,
+    ow_ds_avg: hasOwDs ? round3(owAvg(owSumDs)) : null,
+    ow_ds_max: hasOwDs ? owMaxDs : null,
+    jitter_sd: round3(jitterSd),
+    jitter_ds: round3(jitterDs),
+    loss_sd: lossSd,
+    loss_ds: lossDs,
+    pkt_oos: oos,
+    pkt_mia: mia,
+    pkt_late: late,
+    icpif: icpif != null && icpif >= 0 ? icpif : null,
+  };
+
   return {
     rtts: [],
     latency_min: min,
@@ -270,6 +376,7 @@ export function normaliseJitter(v: (number | null)[]): ProbeResult & { mos?: num
     loss_pct: Math.round(loss_pct * 100) / 100,
     probe_count: numRtt,
     mos,
+    ipsla,
   };
 }
 

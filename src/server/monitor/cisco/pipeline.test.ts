@@ -23,27 +23,37 @@ const fakeNetSnmp = vi.hoisted(() => {
     const operIndex = parseInt(parts[parts.length - 1], 10);
     const colPrefix = parts.slice(0, -1).join('.');
 
-    // udp-jitter table (1.3.6.1.4.1.9.9.42.1.5.2.1.X)
+    // udp-jitter table (1.3.6.1.4.1.9.9.42.1.5.2.1.X) — canonical
+    // CISCO-RTTMON-MIB column numbering.
     if (operIndex === 100) {
       switch (colPrefix) {
         case '1.3.6.1.4.1.9.9.42.1.5.2.1.1':  return 20;   // numRtt
         case '1.3.6.1.4.1.9.9.42.1.5.2.1.2':  return 440;  // rttSum (20 * 22)
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.5':  return 21;   // rttMin
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.6':  return 27;   // rttMax
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.9':  return 9;    // numPosSd
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.10': return 9;    // sumPosSd
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.15': return 5;    // numNegSd
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.16': return 5;    // sumNegSd
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.21': return 8;    // numPosDs
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.22': return 8;    // sumPosDs
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.27': return 6;    // numNegDs
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.28': return 6;    // sumNegDs
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.31': return 0;    // lossSd
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.32': return 0;    // lossDs
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.33': return 0;    // OOS
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.34': return 0;    // MIA
-        case '1.3.6.1.4.1.9.9.42.1.5.2.1.36': return 1;    // sense OK
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.4':  return 21;   // rttMin
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.5':  return 27;   // rttMax
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.8':  return 9;    // numPosSd
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.9':  return 9;    // sumPosSd
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.13': return 5;    // numNegSd
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.14': return 5;    // sumNegSd
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.18': return 8;    // numPosDs
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.19': return 8;    // sumPosDs
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.23': return 6;    // numNegDs
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.24': return 6;    // sumNegDs
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.26': return 0;    // lossSd
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.27': return 0;    // lossDs
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.28': return 0;    // OOS
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.29': return 0;    // MIA
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.30': return 0;    // late arrival
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.31': return 1;    // sense OK
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.33': return 240;  // owSumSd
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.35': return 10;   // owMinSd
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.36': return 16;   // owMaxSd
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.37': return 160;  // owSumDs
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.39': return 6;    // owMinDs
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.40': return 11;   // owMaxDs
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.41': return 20;   // numOw
         case '1.3.6.1.4.1.9.9.42.1.5.2.1.42': return 0;    // MOS not reported
+        case '1.3.6.1.4.1.9.9.42.1.5.2.1.43': return 8;    // ICPIF
       }
     }
     // icmp-echo table (1.3.6.1.4.1.9.9.42.1.2.10.1.X)
@@ -129,6 +139,14 @@ describe('cisco pipeline — pollAllOperations through mocked SNMP', () => {
     expect(r.result.latency_min).toBe(21);
     expect(r.result.latency_max).toBe(27);
     expect(r.result.probe_count).toBe(20);        // not 0
+    // Extended IP SLA datapoints (canonical MIB columns)
+    expect(r.result.ipsla?.ow_sd_avg).toBe(12);   // 240 / 20
+    expect(r.result.ipsla?.ow_ds_avg).toBe(8);    // 160 / 20
+    expect(r.result.ipsla?.ow_sd_min).toBe(10);
+    expect(r.result.ipsla?.ow_ds_max).toBe(11);
+    expect(r.result.ipsla?.icpif).toBe(8);
+    expect(r.result.ipsla?.jitter_sd).toBe(1);    // (9+5)/(9+5)
+    expect(r.result.ipsla?.jitter_ds).toBe(1);    // (8+6)/(8+6)
   });
 
   it('handles BigInt SNMP values (Counter64) without dropping the sample', async () => {
@@ -144,9 +162,9 @@ describe('cisco pipeline — pollAllOperations through mocked SNMP', () => {
             // Force BigInt on the RTT / numRtt leaves
             '1.3.6.1.4.1.9.9.42.1.5.2.1.1.100': 20n,
             '1.3.6.1.4.1.9.9.42.1.5.2.1.2.100': 440n,
-            '1.3.6.1.4.1.9.9.42.1.5.2.1.5.100': 21n,
-            '1.3.6.1.4.1.9.9.42.1.5.2.1.6.100': 27n,
-            '1.3.6.1.4.1.9.9.42.1.5.2.1.36.100': 1,
+            '1.3.6.1.4.1.9.9.42.1.5.2.1.4.100': 21n,
+            '1.3.6.1.4.1.9.9.42.1.5.2.1.5.100': 27n,
+            '1.3.6.1.4.1.9.9.42.1.5.2.1.31.100': 1,
           };
           const vbs = oids.map(oid => ({ oid, type: 70, value: map[oid] ?? 0 }));
           process.nextTick(() => cb(null, vbs));
@@ -199,17 +217,26 @@ describe('cisco pipeline — pollAllOperations through mocked SNMP', () => {
 
     const rows = db.prepare(`SELECT * FROM measurements WHERE target_id = ?`).all('jitter-t') as Array<{
       latency_avg: number; loss_pct: number; source: string;
+      ow_sd_avg: number | null; ow_ds_avg: number | null; icpif: number | null;
+      jitter_sd: number | null;
     }>;
     expect(rows.length).toBeGreaterThan(0);
     expect(rows[0].source).toBe('cisco');
     expect(rows[0].loss_pct).toBe(0);
     expect(rows[0].latency_avg).toBe(22);
+    // Extended IP SLA datapoints persisted to their own columns
+    expect(rows[0].ow_sd_avg).toBe(12);
+    expect(rows[0].ow_ds_avg).toBe(8);
+    expect(rows[0].icpif).toBe(8);
+    expect(rows[0].jitter_sd).toBe(1);
 
-    // And the public API returns it.
+    // And the public API returns it, extras included.
     const resp = await request(app).get(`/api/v1/measurements/jitter-t?from=0`);
     expect(resp.status).toBe(200);
     expect(Array.isArray(resp.body)).toBe(true);
     expect(resp.body[0].latency_avg).toBe(22);
     expect(resp.body[0].loss_pct).toBe(0);
+    expect(resp.body[0].ow_sd_avg).toBe(12);
+    expect(resp.body[0].icpif).toBe(8);
   });
 });

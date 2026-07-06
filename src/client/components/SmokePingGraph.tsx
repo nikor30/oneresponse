@@ -5,7 +5,9 @@ import { useTheme } from '../theme/ThemeContext';
 
 function cssVar(name: string, fallback = ''): string {
   if (typeof document === 'undefined') return fallback;
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  // Theme overrides hang off <body data-theme=…>, so resolve vars there —
+  // documentElement only ever sees the :root (light) values.
+  const v = getComputedStyle(document.body).getPropertyValue(name).trim();
   return v || fallback;
 }
 
@@ -150,13 +152,14 @@ export default function SmokePingGraph({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    // Read theme colors at draw time so the chart re-styles when the user
-    // toggles light/dark (theme is in the effect deps).
-    const plotBg     = cssVar('--bg-card', '#ffffff');
-    const gridStroke = cssVar('--border',  '#e5e7eb');
-    const tickFill   = cssVar('--text-muted', 'var(--text-muted)');
-    const frameStroke= cssVar('--text',   'var(--text-muted)');
-    const titleFill  = cssVar('--text',   'var(--text)');
+    // The plot interior stays white in both themes — the SmokePing smoke
+    // bands are dark translucent grays that need a light background.
+    // Text drawn outside the plot (title, ticks) follows the theme.
+    const plotBg     = '#ffffff';
+    const gridStroke = '#e5e7eb';
+    const tickFill   = cssVar('--text-muted', '#64748b');
+    const frameStroke= cssVar('--text-dim', '#94a3b8');
+    const titleFill  = cssVar('--text', '#0f172a');
 
     const xScale = d3.scaleTime()
       .domain([new Date(from * 1000), new Date(to * 1000)])

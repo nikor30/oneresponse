@@ -40,6 +40,14 @@ function runMigrations(d: Database.Database): void {
   ensureCol('targets',      'ipsla_oper_type',  'TEXT');
   ensureCol('measurements', 'mos',              'REAL');
   ensureCol('measurements', 'source',           'TEXT');
+
+  // Extended Cisco IP SLA (udp-jitter) datapoints.
+  for (const col of ['ow_sd_min', 'ow_sd_avg', 'ow_sd_max', 'ow_ds_min', 'ow_ds_avg', 'ow_ds_max', 'jitter_sd', 'jitter_ds', 'icpif']) {
+    ensureCol('measurements', col, 'REAL');
+  }
+  for (const col of ['loss_sd', 'loss_ds', 'pkt_oos', 'pkt_mia', 'pkt_late']) {
+    ensureCol('measurements', col, 'INTEGER');
+  }
 }
 
 export function closeDb(): void {

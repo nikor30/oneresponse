@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api, type Target, type Measurement } from '../api/client';
 import SmokePingGraph from '../components/SmokePingGraph';
+import IpSlaGraph from '../components/IpSlaGraph';
 
 const TIME_RANGES = [
   { label: '1h', seconds: 3600 },
@@ -65,16 +66,28 @@ export default function TargetDetail() {
     [id, from, to],
   );
 
-  if (!target) return <div style={{ padding: 40, color: '#999' }}>Loading...</div>;
+  if (!target) return <div style={{ padding: 40, color: 'var(--text-dim)' }}>Loading...</div>;
+
+  const isIpsla = target.probe_type === 'cisco-ipsla';
 
   return (
     <div>
-      <Link to="/" style={{ color: '#e94560', textDecoration: 'none', fontSize: 13 }}>
+      <Link to="/" style={{ color: 'var(--accent)', textDecoration: 'none', fontSize: 13 }}>
         &larr; Back to Dashboard
       </Link>
-      <h1 style={{ fontSize: 22, margin: '12px 0 4px' }}>{target.name}</h1>
-      <p style={{ color: '#666', marginBottom: 16 }}>
-        {target.host} {target.site_code && `(${target.site_code})`} &mdash; every {target.probe_interval}s, {target.probe_count} pings
+      <h1 style={{ fontSize: 22, margin: '12px 0 4px', color: 'var(--text)' }}>
+        {target.name}
+        {isIpsla && (
+          <span style={{
+            marginLeft: 10, fontSize: 11, fontWeight: 700, padding: '2px 8px',
+            borderRadius: 4, verticalAlign: 'middle',
+            background: 'rgba(6,182,212,0.14)', color: '#06b6d4', border: '1px solid #06b6d4',
+          }}>IP SLA</span>
+        )}
+      </h1>
+      <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>
+        {target.host} {target.site_code && `(${target.site_code})`} &mdash; every {target.probe_interval}s
+        {isIpsla ? ` · Cisco IP SLA ${target.ipsla_oper_type} op #${target.ipsla_oper_index}` : `, ${target.probe_count} pings`}
       </p>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -84,9 +97,9 @@ export default function TargetDetail() {
             onClick={() => setRange(r.seconds)}
             style={{
               padding: '4px 14px',
-              border: `1px solid ${range === r.seconds ? '#e94560' : '#ddd'}`,
-              background: range === r.seconds ? '#e94560' : '#fff',
-              color: range === r.seconds ? '#fff' : '#333',
+              border: `1px solid ${range === r.seconds ? 'var(--accent)' : 'var(--border)'}`,
+              background: range === r.seconds ? 'var(--accent)' : 'var(--bg-card)',
+              color: range === r.seconds ? 'var(--accent-fg)' : 'var(--text-muted)',
               borderRadius: 4,
               cursor: 'pointer',
               fontSize: 13,
@@ -100,8 +113,8 @@ export default function TargetDetail() {
           href={exportUrl}
           style={{
             padding: '4px 14px',
-            background: '#0f172a',
-            color: '#fff',
+            background: 'var(--accent)',
+            color: 'var(--accent-fg)',
             borderRadius: 4,
             fontSize: 13,
             textDecoration: 'none',
@@ -112,9 +125,9 @@ export default function TargetDetail() {
         </a>
       </div>
 
-      <div style={{ background: '#fff', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', position: 'relative' }}>
+      <div style={cardStyle}>
         {loading && (
-          <div style={{ position: 'absolute', top: 12, right: 16, color: '#94a3b8', fontSize: 12 }}>
+          <div style={{ position: 'absolute', top: 12, right: 16, color: 'var(--text-dim)', fontSize: 12 }}>
             Loading…
           </div>
         )}
@@ -127,6 +140,24 @@ export default function TargetDetail() {
           probeIntervalSec={target.probe_interval}
         />
       </div>
+
+      {isIpsla && (
+        <div style={{ ...cardStyle, marginTop: 20 }}>
+          <h2 style={{ fontSize: 15, margin: '0 0 12px', color: 'var(--text)' }}>
+            IP SLA metrics — {rangeLabel(range)}
+          </h2>
+          <IpSlaGraph measurements={measurements} from={from} to={to} />
+        </div>
+      )}
     </div>
   );
 }
+
+const cardStyle: React.CSSProperties = {
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  padding: 20,
+  boxShadow: 'var(--shadow)',
+  position: 'relative',
+};

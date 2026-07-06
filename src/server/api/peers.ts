@@ -139,9 +139,16 @@ router.post('/push', (req: Request, res: Response) => {
   const peerId = req.headers['x-peer-id'] as string || 'unknown';
 
   const insert = db.prepare(`
-    INSERT INTO measurements (target_id, peer_id, timestamp, latency_min, latency_avg, latency_max, jitter, loss_pct, probe_count, rtts, sla_score)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO measurements (target_id, peer_id, timestamp, latency_min, latency_avg, latency_max,
+                              jitter, loss_pct, probe_count, rtts, sla_score, mos,
+                              ow_sd_min, ow_sd_avg, ow_sd_max, ow_ds_min, ow_ds_avg, ow_ds_max,
+                              jitter_sd, jitter_ds, loss_sd, loss_ds, pkt_oos, pkt_mia, pkt_late, icpif)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+
+  // Numeric-or-null coercion for the optional extended fields so a peer
+  // can't inject arbitrary values into typed columns.
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
   const insertMany = db.transaction((items: Record<string, unknown>[]) => {
     for (const m of items) {
@@ -149,7 +156,13 @@ router.post('/push', (req: Request, res: Response) => {
         m.target_id, peerId, m.timestamp,
         m.latency_min, m.latency_avg, m.latency_max,
         m.jitter, m.loss_pct, m.probe_count,
-        JSON.stringify(m.rtts), m.sla_score
+        JSON.stringify(m.rtts), m.sla_score, num(m.mos),
+        num(m.ow_sd_min), num(m.ow_sd_avg), num(m.ow_sd_max),
+        num(m.ow_ds_min), num(m.ow_ds_avg), num(m.ow_ds_max),
+        num(m.jitter_sd), num(m.jitter_ds),
+        num(m.loss_sd), num(m.loss_ds),
+        num(m.pkt_oos), num(m.pkt_mia), num(m.pkt_late),
+        num(m.icpif)
       );
     }
   });

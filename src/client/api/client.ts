@@ -118,6 +118,24 @@ export interface Measurement {
   // Individual ping round-trip times for this sample. Only populated when
   // the query is not bucketed (i.e. ≤ 24h ranges).
   rtts: number[] | null;
+  mos: number | null;
+  // Extended Cisco IP SLA (udp-jitter) datapoints — null for ICMP rows.
+  // One-way latencies are ms and need NTP sync on the devices; loss/pkt_*
+  // are raw packet counts for the poll cycle.
+  ow_sd_min: number | null;
+  ow_sd_avg: number | null;
+  ow_sd_max: number | null;
+  ow_ds_min: number | null;
+  ow_ds_avg: number | null;
+  ow_ds_max: number | null;
+  jitter_sd: number | null;
+  jitter_ds: number | null;
+  loss_sd: number | null;
+  loss_ds: number | null;
+  pkt_oos: number | null;
+  pkt_mia: number | null;
+  pkt_late: number | null;
+  icpif: number | null;
 }
 
 export interface DashboardTarget {

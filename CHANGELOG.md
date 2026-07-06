@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Full Cisco IP SLA telemetry
+- udp-jitter polls now collect every retrievable datapoint from
+  rttMonLatestJitterOperTable: one-way latency min/avg/max in both
+  directions (S→D and D→S, requires NTP sync), per-direction jitter,
+  per-direction packet loss, out-of-sequence / MIA / late-arrival packet
+  counters, MOS, and ICPIF. All stored as dedicated `measurements` columns
+  (auto-migrated) and included in raw + bucketed API responses, CSV
+  exports, and peer push/receive.
+- **Fixed the jitter OID column mapping** — the previous layout was shifted
+  against the published CISCO-RTTMON-MIB (it read `Sense` where
+  `PacketLossSD` lives and `RTTMax` as `RTTMin`), which could make healthy
+  udp-jitter operations report as down. Columns now match the canonical
+  MIB (Sense=.31, MOS=.42, ICPIF=.43), pinned by a regression test.
+- New "IP SLA metrics" chart on the target detail page and dashboard modal:
+  unit-grouped panels (latency, jitter, packet events, MOS, ICPIF) on a
+  shared time axis, min/max bands for RTT and one-way latency, a hover
+  crosshair with per-series readout, and per-series show/hide toggle chips
+  (persisted per browser). Panels collapse when all their series are hidden.
+- Theme fix: canvas charts now resolve their colors against the active
+  theme (chart titles were invisible in dark mode).
+
 ## 1.1.0 — 2026-07-06
 
 ### Look & feel
