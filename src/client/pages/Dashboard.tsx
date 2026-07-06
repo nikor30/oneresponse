@@ -1,8 +1,23 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { api, type DashboardNode, type DashboardPeerStub } from '../api/client';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { api, type DashboardNode, type DashboardPeerStub, type DashboardGroup } from '../api/client';
 import DartChart from '../components/DartChart';
 import GroupSelector from '../components/GroupSelector';
 import TargetDetailModal from '../components/TargetDetailModal';
+
+type SourceFilter = 'all' | 'icmp' | 'cisco-ipsla';
+
+// Peers running an older version don't send probe_type — treat those
+// targets as local ICMP so filtering stays predictable.
+function probeTypeOf(t: { probe_type?: string }): 'icmp' | 'cisco-ipsla' {
+  return t.probe_type === 'cisco-ipsla' ? 'cisco-ipsla' : 'icmp';
+}
+
+function filterBySource(data: DashboardGroup[], source: SourceFilter): DashboardGroup[] {
+  if (source === 'all') return data;
+  return data
+    .map(g => ({ ...g, targets: g.targets.filter(t => probeTypeOf(t) === source) }))
+    .filter(g => g.targets.length > 0);
+}
 
 export default function Dashboard() {
   const [local, setLocal] = useState<DashboardNode | null>(null);
@@ -104,6 +119,13 @@ export default function Dashboard() {
 
   return (
     <>
+      {local && (
+        <SummaryBar
+          local={local}
+          peers={peerStubs.map(s => peerData[s.peer_id]).filter(Boolean)}
+          peerCount={peerStubs.length}
+        />
+      )}
       <div style={{
         display: 'grid',
         gap: 24,
@@ -163,8 +185,25 @@ function NodePane({
   loading: boolean;
 }) {
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [source, setSource] = useState<SourceFilter>('all');
   const isRemote = node.peer_id != null;
-  const data = node.dashboard;
+
+  const hasIpsla = useMemo(
+    () => node.dashboard.some(g => g.targets.some(t => probeTypeOf(t) === 'cisco-ipsla')),
+    [node.dashboard]
+  );
+  const data = useMemo(
+    () => filterBySource(node.dashboard, source),
+    [node.dashboard, source]
+  );
+
+  // Switching source can remove the currently selected group from view —
+  // fall back to "All groups" so the chart never renders empty.
+  useEffect(() => {
+    if (selectedGroup && !data.some(g => g.group.id === selectedGroup)) {
+      setSelectedGroup(null);
+    }
+  }, [data, selectedGroup]);
 
   const totalTargets = data.reduce((n, g) => n + g.targets.length, 0);
   const breached = data.reduce(
@@ -218,7 +257,7 @@ function NodePane({
         <div style={{
           background: 'rgba(220,38,38,0.08)',
           border: '1px solid rgba(220,38,38,0.35)',
-          color: '#dc2626',
+          color: 'var(--crit)',
           padding: '14px 18px',
           borderRadius: 8,
           fontSize: 13,
@@ -226,7 +265,7 @@ function NodePane({
         }}>
           Could not reach this peer: <code>{node.error}</code>
         </div>
-      ) : data.length === 0 ? (
+      ) : node.dashboard.length === 0 ? (
         <div style={{
           background: 'var(--bg-card)',
           border: '1px dashed var(--border)',
@@ -241,27 +280,108 @@ function NodePane({
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
-            <GroupSelector
-              groups={data.map(d => ({ id: d.group.id, name: d.group.name }))}
-              selected={selectedGroup}
-              onSelect={setSelectedGroup}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {hasIpsla && (
+                <div className="or-seg" role="group" aria-label="Filter by probe source">
+                  <button className={source === 'all' ? 'active' : ''} onClick={() => setSource('all')}>All sources</button>
+                  <button className={source === 'icmp' ? 'active' : ''} onClick={() => setSource('icmp')}>Local ICMP</button>
+                  <button className={source === 'cisco-ipsla' ? 'active' : ''} onClick={() => setSource('cisco-ipsla')}>IP SLA</button>
+                </div>
+              )}
+              <GroupSelector
+                groups={data.map(d => ({ id: d.group.id, name: d.group.name }))}
+                selected={selectedGroup}
+                onSelect={setSelectedGroup}
+              />
+            </div>
             <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)' }}>
               <span><strong style={{ color: 'var(--text)' }}>{totalTargets}</strong> targets</span>
-              <span><strong style={{ color: breached > 0 ? '#dc2626' : '#16a34a' }}>{breached}</strong> breached</span>
+              <span><strong style={{ color: breached > 0 ? 'var(--crit)' : 'var(--ok)' }}>{breached}</strong> breached</span>
               {noData > 0 && <span><strong style={{ color: 'var(--text-dim)' }}>{noData}</strong> awaiting data</span>}
             </div>
           </div>
-          <DartChart
-            data={data}
-            onTargetClick={onTargetClick}
-            selectedGroup={selectedGroup}
-            showLabels={showLabels}
-          />
+          {data.length === 0 ? (
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px dashed var(--border)',
+              color: 'var(--text-muted)',
+              padding: '20px 18px',
+              borderRadius: 8,
+              fontSize: 13,
+              textAlign: 'center',
+            }}>
+              No {source === 'cisco-ipsla' ? 'Cisco IP SLA' : 'local ICMP'} targets on this node.
+            </div>
+          ) : (
+            <DartChart
+              data={data}
+              onTargetClick={onTargetClick}
+              selectedGroup={selectedGroup}
+              showLabels={showLabels}
+            />
+          )}
         </>
       )}
     </div>
   );
+}
+
+// vRNI-style summary strip: entity counts with red "unhealthy" chips.
+// Numbers come from the local node plus whatever peer panes have loaded.
+function SummaryBar({ local, peers, peerCount }: {
+  local: DashboardNode;
+  peers: DashboardNode[];
+  peerCount: number;
+}) {
+  const allTargets = local.dashboard.flatMap(g => g.targets);
+  const icmp = allTargets.filter(t => probeTypeOf(t) === 'icmp');
+  const ipsla = allTargets.filter(t => probeTypeOf(t) === 'cisco-ipsla');
+  const breachedOf = (ts: { sla_score: number | null }[]) =>
+    ts.filter(t => t.sla_score != null && t.sla_score < 70).length;
+  const awaiting = allTargets.filter(t => t.sla_score == null).length;
+  const peersDown = peers.filter(p => p.error != null).length;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'stretch', gap: 4, flexWrap: 'wrap',
+      background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+      boxShadow: 'var(--shadow)', padding: 8, marginBottom: 20,
+    }}>
+      <SummaryStat label="Targets" value={allTargets.length} bad={breachedOf(allTargets)} badLabel="Breached" />
+      <SummaryDivider />
+      <SummaryStat label="Local ICMP" value={icmp.length} bad={breachedOf(icmp)} badLabel="Breached" />
+      <SummaryDivider />
+      <SummaryStat label="Cisco IP SLA" value={ipsla.length} bad={breachedOf(ipsla)} badLabel="Breached" />
+      <SummaryDivider />
+      <SummaryStat label="Peers" value={peerCount} bad={peersDown} badLabel="Unreachable" />
+      {awaiting > 0 && (
+        <>
+          <SummaryDivider />
+          <SummaryStat label="Awaiting data" value={awaiting} bad={0} badLabel="" />
+        </>
+      )}
+    </div>
+  );
+}
+
+function SummaryStat({ label, value, bad, badLabel }: {
+  label: string; value: number; bad: number; badLabel: string;
+}) {
+  return (
+    <div style={{ flex: '1 1 130px', padding: '10px 14px' }}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.1, color: 'var(--text)' }}>{value}</span>
+        {bad > 0 && (
+          <span className="or-badge crit">{bad} {badLabel}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryDivider() {
+  return <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '6px 0' }} aria-hidden="true" />;
 }
 
 // Per-pane placeholder shown while a (possibly slow or unreachable) peer is

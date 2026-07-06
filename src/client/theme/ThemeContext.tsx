@@ -17,10 +17,9 @@ function readInitialTheme(): Theme {
     const v = localStorage.getItem(STORAGE_KEY);
     if (v === 'dark' || v === 'light') return v;
   } catch { /* ignore */ }
-  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
-  }
-  return 'light';
+  // vRNI-style dark is the product default; the theme toggle in the menu
+  // (persisted per browser) is the way to opt into light mode.
+  return 'dark';
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

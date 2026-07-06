@@ -137,7 +137,7 @@ export default function LoginModal({ open, onClose, setupMode }: Props) {
             </>
           )}
 
-          {error && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 10 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--crit)', fontSize: 12, marginTop: 10 }}>{error}</div>}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button

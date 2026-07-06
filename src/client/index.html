@@ -7,42 +7,57 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    /* Light theme — vRNI-inspired: cool gray-blue page, white panels,
+       Clarity cyan accent. The header stays dark in both themes (like
+       Aria Operations for Networks). */
     :root {
-      --bg-page:   #f5f5f5;
+      --bg-page:   #f2f6f8;
       --bg-card:   #ffffff;
-      --bg-header: #1a1a2e;
-      --bg-hover:  #f1f5f9;
-      --text:      #0f172a;
-      --text-muted:#475569;
-      --text-dim:  #94a3b8;
-      --border:    #e5e7eb;
-      --accent:    #e94560;
+      --bg-header: #14252e;
+      --bg-hover:  #e9f1f5;
+      --text:      #16232b;
+      --text-muted:#4e6470;
+      --text-dim:  #8aa0ac;
+      --border:    #d8e3e9;
+      --accent:    #0079b8;
       --accent-fg: #ffffff;
-      --shadow:    0 1px 3px rgba(0,0,0,0.1);
-      --shadow-md: 0 4px 20px rgba(15,23,42,0.08);
+      --ok:        #3c8500;
+      --ok-bg:     rgba(60,133,0,0.10);
+      --warn:      #b58000;
+      --warn-bg:   rgba(181,128,0,0.12);
+      --crit:      #d92b2b;
+      --crit-bg:   rgba(217,43,43,0.10);
+      --shadow:    0 1px 3px rgba(20,37,46,0.10);
+      --shadow-md: 0 4px 20px rgba(20,37,46,0.10);
       --drawer-bg: #ffffff;
       --pill-bg:   rgba(255,255,255,0.92);
-      --chart-bg:  linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      --chart-bg:  linear-gradient(180deg, #ffffff 0%, #f4f8fa 100%);
     }
-    /* Dark theme — GitHub-style palette: page is darkest, cards lift up
-       to a slightly lighter elevated surface. Avoids pure black and uses
-       a desaturated rose for the accent so it doesn't vibrate on screen. */
+    /* Dark theme (default) — VMware vRNI / Clarity dark palette: deep
+       blue-teal page, panels one step lighter, cyan #49afd9 accent and
+       the Clarity status colors. */
     [data-theme="dark"] {
-      --bg-page:   #0d1117;
-      --bg-card:   #161b22;
-      --bg-header: #010409;
-      --bg-hover:  #21262d;
-      --text:      #e6edf3;
-      --text-muted:#9aa4af;
-      --text-dim:  #6e7681;
-      --border:    #30363d;
-      --accent:    #ff7d8c;
-      --accent-fg: #0d1117;
-      --shadow:    0 1px 2px rgba(0,0,0,0.35);
-      --shadow-md: 0 4px 16px rgba(0,0,0,0.45);
-      --drawer-bg: #161b22;
-      --pill-bg:   rgba(22,27,34,0.95);
-      --chart-bg:  linear-gradient(180deg, #1c2128 0%, #161b22 100%);
+      --bg-page:   #0e181f;
+      --bg-card:   #17242c;
+      --bg-header: #0a1318;
+      --bg-hover:  #1f303a;
+      --text:      #e2eaef;
+      --text-muted:#9db0bb;
+      --text-dim:  #66808f;
+      --border:    #2b3e4a;
+      --accent:    #49afd9;
+      --accent-fg: #06131a;
+      --ok:        #61b715;
+      --ok-bg:     rgba(97,183,21,0.14);
+      --warn:      #efc006;
+      --warn-bg:   rgba(239,192,6,0.13);
+      --crit:      #f45151;
+      --crit-bg:   rgba(244,81,81,0.14);
+      --shadow:    0 1px 2px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
+      --drawer-bg: #17242c;
+      --pill-bg:   rgba(14,24,31,0.92);
+      --chart-bg:  linear-gradient(180deg, #1a2932 0%, #14212a 100%);
       color-scheme: dark;
     }
 
@@ -55,7 +70,7 @@
 
     /* Drawer animation */
     .drawer-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+      position: fixed; inset: 0; background: rgba(0,0,0,0.45);
       opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
       z-index: 99;
     }
@@ -65,13 +80,41 @@
       width: min(90vw, 360px);
       background: var(--drawer-bg);
       color: var(--text);
-      box-shadow: -8px 0 30px rgba(0,0,0,0.25);
+      box-shadow: -8px 0 30px rgba(0,0,0,0.35);
       transform: translateX(100%);
       transition: transform 0.25s ease;
       z-index: 100;
       overflow-y: auto;
     }
     .drawer.open { transform: translateX(0); }
+
+    /* --- Status badges (always paired with a text label, never color-alone) */
+    .or-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 600; line-height: 1.6;
+      border: 1px solid transparent; white-space: nowrap;
+    }
+    .or-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .or-badge.ok       { color: var(--ok);   background: var(--ok-bg);   border-color: var(--ok); }
+    .or-badge.crit     { color: var(--crit); background: var(--crit-bg); border-color: var(--crit); }
+    .or-badge.warn     { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+    .or-badge.neutral  { color: var(--text-muted); background: var(--bg-hover); border-color: var(--border); }
+
+    /* --- Segmented control (source / status filters) ------------------- */
+    .or-seg {
+      display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
+      overflow: hidden; background: var(--bg-card); flex-wrap: nowrap;
+    }
+    .or-seg button {
+      padding: 6px 14px; border: none; background: transparent;
+      color: var(--text-muted); font-size: 13px; font-weight: 500; cursor: pointer;
+      border-right: 1px solid var(--border); white-space: nowrap;
+    }
+    .or-seg button:last-child { border-right: none; }
+    .or-seg button.active {
+      background: var(--accent); color: var(--accent-fg); font-weight: 700;
+    }
 
     /* --- Loading affordances (per-pane spinner + skeleton radar) ------- */
     .or-spinner {
@@ -123,7 +166,7 @@
     }
   </style>
 </head>
-<body data-theme="light">
+<body data-theme="dark">
   <div id="root"></div>
   <script type="module" src="./main.tsx"></script>
 </body>

@@ -1,5 +1,9 @@
-import pkg from '../../../package.json' assert { type: 'json' };
+// package.json is loaded via createRequire because `import ... assert`
+// was removed in Node 22+ and `with` isn't supported by every Node 20.x.
+import { createRequire } from 'module';
 import { Router, Request, Response } from 'express';
+
+const pkg = createRequire(import.meta.url)('../../../package.json') as { version?: string };
 import { getDb } from '../db/index.js';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
@@ -9,6 +13,7 @@ import measurementsRouter from './measurements.js';
 import peersRouter from './peers.js';
 import authRouter from './auth.js';
 import devicesRouter from './devices.js';
+import statusRouter from './status.js';
 import { getStorageStats } from '../maintenance.js';
 import { requireAdmin } from '../auth.js';
 
@@ -20,6 +25,7 @@ router.use('/targets', targetsRouter);
 router.use('/measurements', measurementsRouter);
 router.use('/peers', peersRouter);
 router.use('/devices', devicesRouter);
+router.use('/status', statusRouter);
 
 interface DashboardRow {
   group_id: string;
