@@ -212,6 +212,29 @@ export interface AuthStatus {
   username: string | null;
 }
 
+// One row of the client liveness view (GET /status).
+export type ClientStatusKind = 'alive' | 'dead' | 'no-data' | 'disabled';
+
+export interface ClientStatusEntry {
+  id: string;
+  name: string;
+  host: string;
+  site_code: string | null;
+  group_id: string;
+  group_name: string;
+  probe_type: 'icmp' | 'cisco-ipsla';
+  enabled: number;
+  probe_interval: number;
+  timestamp: number | null;
+  latency_avg: number | null;
+  jitter: number | null;
+  loss_pct: number | null;
+  sla_score: number | null;
+  status: ClientStatusKind;
+  status_reason: string | null;
+  checked_at: number;
+}
+
 // API calls
 export const api = {
   // Dashboard
@@ -323,6 +346,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ group_id, operations }),
     }),
+
+  // Client liveness (alive/dead view)
+  getClientStatus: () => request<ClientStatusEntry[]>('/status'),
+  exportStatusCsvUrl: () => `${BASE}/status/export.csv`,
 
   // Auth
   getAuthStatus: () => request<AuthStatus>('/auth/me'),

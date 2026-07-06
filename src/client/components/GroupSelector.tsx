@@ -20,9 +20,9 @@ const styles = {
   },
   button: (active: boolean) => ({
     padding: '6px 16px',
-    border: `1px solid ${active ? '#e94560' : '#ddd'}`,
-    background: active ? '#e94560' : '#fff',
-    color: active ? '#fff' : '#333',
+    border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+    background: active ? 'var(--accent)' : 'var(--bg-card)',
+    color: active ? 'var(--accent-fg)' : 'var(--text-muted)',
     borderRadius: 20,
     cursor: 'pointer',
     fontSize: 13,

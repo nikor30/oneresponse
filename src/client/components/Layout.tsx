@@ -4,6 +4,12 @@ import SettingsDrawer from './SettingsDrawer';
 import LoginModal from './LoginModal';
 import { useAuth } from '../auth/AuthContext';
 
+const NAV_LINKS = [
+  { path: '/', label: 'Dashboard' },
+  { path: '/status', label: 'Status' },
+  { path: '/top', label: 'Top 10' },
+];
+
 const styles = {
   header: {
     background: 'var(--bg-header)',
@@ -13,32 +19,47 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     height: 56,
-    gap: 32,
+    gap: 24,
+    position: 'sticky',
+    top: 0,
+    zIndex: 50,
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
   } as React.CSSProperties,
   left: {
     display: 'flex',
     alignItems: 'center',
-    gap: 24,
+    gap: 18,
+    minWidth: 0,
+  } as React.CSSProperties,
+  nav: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    overflowX: 'auto',
   } as React.CSSProperties,
   right: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
+    flexShrink: 0,
   } as React.CSSProperties,
   logo: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: 700,
     color: 'var(--accent)',
     textDecoration: 'none',
+    letterSpacing: '-0.02em',
+    whiteSpace: 'nowrap',
   } as React.CSSProperties,
-  dashLink: (active: boolean) => ({
-    color: active ? 'var(--accent)' : '#ccc',
+  navLink: (active: boolean) => ({
+    color: active ? 'var(--accent)' : '#b9c8d1',
     textDecoration: 'none',
-    padding: '8px 14px',
-    borderRadius: 4,
+    padding: '7px 13px',
+    borderRadius: 6,
     fontSize: 14,
     fontWeight: active ? 600 : 400,
-    background: active ? 'rgba(233,69,96,0.12)' : 'transparent',
+    background: active ? 'rgba(73,175,217,0.14)' : 'transparent',
+    whiteSpace: 'nowrap',
   }) as React.CSSProperties,
   burger: {
     background: 'transparent',
@@ -56,14 +77,14 @@ const styles = {
   authBtn: {
     background: 'transparent',
     border: '1px solid rgba(255,255,255,0.15)',
-    color: '#ccc',
+    color: '#b9c8d1',
     padding: '6px 12px',
     borderRadius: 6,
     cursor: 'pointer',
     fontSize: 13,
   } as React.CSSProperties,
   userChip: {
-    color: '#ccc',
+    color: '#b9c8d1',
     fontSize: 13,
     display: 'flex',
     alignItems: 'center',
@@ -89,9 +110,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <header className="app-header" style={styles.header}>
         <div style={styles.left}>
           <Link to="/" style={styles.logo}>oneresponse</Link>
-          <Link to="/" style={styles.dashLink(location.pathname === '/')}>
-            Dashboard
-          </Link>
+          <nav style={styles.nav} aria-label="Primary">
+            {NAV_LINKS.map(l => (
+              <Link key={l.path} to={l.path} style={styles.navLink(location.pathname === l.path)}>
+                {l.label}
+              </Link>
+            ))}
+          </nav>
         </div>
         <div style={styles.right}>
           {status.logged_in ? (

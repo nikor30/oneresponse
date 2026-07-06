@@ -63,11 +63,20 @@ export default function TargetManager() {
       .finally(() => setOpsLoading(false));
   }, [form.probe_type, form.device_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Targets visible in the active tab.
-  const visibleTargets = useMemo(
-    () => targets.filter(t => (t.probe_type || 'icmp') === tab),
-    [targets, tab]
-  );
+  // Free-text filter across name / host / site code / group name.
+  const [q, setQ] = useState('');
+
+  // Targets visible in the active tab (search filter applied).
+  const visibleTargets = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const nameOf = new Map(groups.map(g => [g.id, g.name]));
+    return targets.filter(t => {
+      if ((t.probe_type || 'icmp') !== tab) return false;
+      if (!needle) return true;
+      const hay = `${t.name} ${t.host} ${t.site_code || ''} ${nameOf.get(t.group_id) || ''}`.toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [targets, tab, q, groups]);
 
   const isCisco = tab === 'cisco-ipsla';
 
@@ -300,8 +309,24 @@ export default function TargetManager() {
             </button>
           )}
         </div>
-        {error && <div style={{ color: '#dc2626', marginTop: 8, fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--crit)', marginTop: 8, fontSize: 13 }}>{error}</div>}
       </form>
+
+      {/* Search filter for the table below */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input
+          style={{ ...input, maxWidth: 280 }}
+          placeholder="Filter by name, host, site, group…"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          aria-label="Filter targets"
+        />
+        {q && (
+          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+            {visibleTargets.length} match{visibleTargets.length === 1 ? '' : 'es'}
+          </span>
+        )}
+      </div>
 
       {/* Bulk action bar — only visible when rows are selected */}
       {selectedIds.length > 0 && (
@@ -316,7 +341,7 @@ export default function TargetManager() {
             </select>
             <button disabled={bulkBusy || !bulkGroup} style={bulkBtn} onClick={bulkMove}>Apply</button>
           </span>
-          <button disabled={bulkBusy} style={{ ...bulkBtn, background: '#fee', color: '#dc2626', borderColor: 'rgba(220,38,38,0.3)' }} onClick={bulkDelete}>
+          <button disabled={bulkBusy} style={{ ...bulkBtn, background: 'var(--crit-bg)', color: 'var(--crit)', borderColor: 'rgba(220,38,38,0.3)' }} onClick={bulkDelete}>
             Delete selected
           </button>
           <button disabled={bulkBusy} style={{ ...bulkBtn, marginLeft: 'auto' }} onClick={() => setSelected(new Set())}>Clear</button>
@@ -360,7 +385,7 @@ export default function TargetManager() {
                   <td style={{ ...td, textAlign: 'center' }}>{t.enabled ? 'Yes' : 'No'}</td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => handleEdit(t)} style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)', marginRight: 4, fontSize: 12 }}>Edit</button>
-                    <button onClick={() => handleDelete(t.id)} style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}>Delete</button>
+                    <button onClick={() => handleDelete(t.id)} style={{ ...btnStyle, background: 'var(--crit-bg)', color: 'var(--crit)', fontSize: 12 }}>Delete</button>
                   </td>
                 </tr>
               );

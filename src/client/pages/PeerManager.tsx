@@ -187,7 +187,7 @@ export default function PeerManager() {
             <button type="button" style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)' }} onClick={() => { setEditingId(null); setForm(emptyForm); }}>Cancel</button>
           )}
         </div>
-        {error && <div style={{ color: '#dc2626', marginTop: 8, fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--crit)', marginTop: 8, fontSize: 13 }}>{error}</div>}
       </form>
 
       {/* ------------- PEERS TABLE ------------- */}
@@ -213,9 +213,9 @@ export default function PeerManager() {
                   <td style={{ ...td, fontFamily: 'monospace', fontSize: 12 }}>{p.url}</td>
                   <td style={{ ...td, textAlign: 'center' }}>
                     {p.enabled ? (hasError ? (
-                      <span style={{ color: '#dc2626' }}>⚠ Error</span>
+                      <span style={{ color: 'var(--crit)' }}>⚠ Error</span>
                     ) : p.last_seen ? (
-                      <span style={{ color: '#16a34a' }}>✓ OK</span>
+                      <span style={{ color: 'var(--ok)' }}>✓ OK</span>
                     ) : (
                       <span style={{ color: 'var(--text-dim)' }}>Never tried</span>
                     )) : (
@@ -234,7 +234,7 @@ export default function PeerManager() {
                       {testing[p.id] ? 'Testing…' : 'Test'}
                     </button>
                     <button onClick={() => handleEdit(p)} style={{ ...btnStyle, background: 'var(--bg-hover)', color: 'var(--text)', marginRight: 4, fontSize: 12 }}>Edit</button>
-                    <button onClick={() => handleDelete(p.id)} style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}>Delete</button>
+                    <button onClick={() => handleDelete(p.id)} style={{ ...btnStyle, background: 'var(--crit-bg)', color: 'var(--crit)', fontSize: 12 }}>Delete</button>
                   </td>
                 </tr>
                 {(result || p.last_error) && (
@@ -243,7 +243,7 @@ export default function PeerManager() {
                       <div style={{
                         background: hasError ? 'rgba(220,38,38,0.08)' : 'rgba(34,197,94,0.08)',
                         border: `1px solid ${hasError ? 'rgba(220,38,38,0.35)' : 'rgba(34,197,94,0.35)'}`,
-                        color: hasError ? '#dc2626' : 'var(--text)',
+                        color: hasError ? 'var(--crit)' : 'var(--text)',
                         padding: '8px 12px',
                         borderRadius: 6,
                         fontSize: 12,
@@ -298,14 +298,14 @@ export default function PeerManager() {
             Create key
           </button>
         </div>
-        {keyErr && <div style={{ color: '#dc2626', marginTop: 8, fontSize: 13 }}>{keyErr}</div>}
+        {keyErr && <div style={{ color: 'var(--crit)', marginTop: 8, fontSize: 13 }}>{keyErr}</div>}
 
         {newKey && (
           <div style={{
             marginTop: 12,
             padding: 12,
             background: 'rgba(34,197,94,0.08)',
-            border: '1px dashed #16a34a',
+            border: '1px dashed var(--ok)',
             borderRadius: 6,
             fontSize: 13,
           }}>
@@ -349,7 +349,7 @@ export default function PeerManager() {
               <td style={{ ...td, fontWeight: 600 }}>{k.name}</td>
               <td style={{ ...td, color: 'var(--text-muted)' }}>{new Date(k.created_at * 1000).toLocaleString()}</td>
               <td style={{ ...td, textAlign: 'right' }}>
-                <button onClick={() => deleteKey(k.id)} style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}>Revoke</button>
+                <button onClick={() => deleteKey(k.id)} style={{ ...btnStyle, background: 'var(--crit-bg)', color: 'var(--crit)', fontSize: 12 }}>Revoke</button>
               </td>
             </tr>
           ))}

@@ -13,13 +13,13 @@ interface Props {
 
 const btnStyle: React.CSSProperties = {
   padding: '6px 14px',
-  border: '1px solid #cbd5e1',
-  borderRadius: 4,
-  background: '#fff',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  background: 'var(--bg-card)',
   cursor: 'pointer',
   fontSize: 13,
   fontWeight: 600,
-  color: '#0f172a',
+  color: 'var(--text)',
   textDecoration: 'none',
   display: 'inline-flex',
   alignItems: 'center',
@@ -80,7 +80,7 @@ export default function CsvIO({ exportUrl, exportFilename, onImport, onImported,
         style={{ display: 'none' }}
       />
       {status && (
-        <span style={{ fontSize: 12, color: status.startsWith('Import failed') ? '#dc2626' : '#475569', whiteSpace: 'pre-line' }}>
+        <span style={{ fontSize: 12, color: status.startsWith('Import failed') ? 'var(--crit)' : 'var(--text-muted)', whiteSpace: 'pre-line' }}>
           {status}
         </span>
       )}

@@ -181,7 +181,7 @@ export default function GroupManager() {
             </button>
           )}
         </div>
-        {error && <div style={{ color: '#dc2626', marginTop: 8, fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--crit)', marginTop: 8, fontSize: 13 }}>{error}</div>}
       </form>
 
       <table style={{
@@ -231,7 +231,7 @@ export default function GroupManager() {
                 >Edit</button>
                 <button
                   onClick={() => handleDelete(g.id)}
-                  style={{ ...btnStyle, background: '#fee', color: '#dc2626', fontSize: 12 }}
+                  style={{ ...btnStyle, background: 'var(--crit-bg)', color: 'var(--crit)', fontSize: 12 }}
                 >Delete</button>
               </td>
             </tr>

@@ -47,7 +47,7 @@ export default function SettingsPage() {
     <div>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <h1 style={{ fontSize: 22, margin: 0, color: 'var(--text)' }}>Settings</h1>
-        {ok && <span style={{ fontSize: 12, color: '#16a34a' }}>✓ {ok}</span>}
+        {ok && <span style={{ fontSize: 12, color: 'var(--ok)' }}>✓ {ok}</span>}
       </div>
 
       {err && <div style={cardError}>{err}</div>}
@@ -113,8 +113,8 @@ function AdminSection({ loggedInUser, onChanged }: { loggedInUser: string | null
         <Field label="Confirm new password">
           <input type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} style={input} />
         </Field>
-        {err && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>{err}</div>}
-        {ok && <div style={{ color: '#16a34a', fontSize: 12, marginTop: 6 }}>✓ Password updated</div>}
+        {err && <div style={{ color: 'var(--crit)', fontSize: 12, marginTop: 6 }}>{err}</div>}
+        {ok && <div style={{ color: 'var(--ok)', fontSize: 12, marginTop: 6 }}>✓ Password updated</div>}
         <div style={{ marginTop: 12 }}>
           <button type="submit" disabled={busy} style={primaryBtn(busy)}>
             {busy ? 'Saving…' : 'Update password'}
@@ -214,7 +214,7 @@ function SyslogSection({ settings, save }: { settings: Record<string, string | n
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ fontSize: 13 }}>
-          Forwarding {enabled ? <span style={{ color: '#16a34a' }}>enabled</span> : <span style={{ color: 'var(--text-dim)' }}>disabled</span>}
+          Forwarding {enabled ? <span style={{ color: 'var(--ok)' }}>enabled</span> : <span style={{ color: 'var(--text-dim)' }}>disabled</span>}
         </div>
         <button
           type="button"
@@ -359,7 +359,7 @@ const primaryBtn = (busy: boolean): React.CSSProperties => ({
 const cardError: React.CSSProperties = {
   background: 'rgba(220,38,38,0.08)',
   border: '1px solid rgba(220,38,38,0.35)',
-  color: '#dc2626',
+  color: 'var(--crit)',
   padding: '10px 14px',
   borderRadius: 8,
   fontSize: 13,

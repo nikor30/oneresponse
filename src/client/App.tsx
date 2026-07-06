@@ -8,6 +8,7 @@ import GroupManager from './pages/GroupManager';
 import PeerManager from './pages/PeerManager';
 import DeviceManager from './pages/DeviceManager';
 import Top10Page from './pages/Top10';
+import ClientStatus from './pages/ClientStatus';
 import SettingsPage from './pages/Settings';
 import AdminGate from './components/AdminGate';
 import { ThemeProvider } from './theme/ThemeContext';
@@ -22,6 +23,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/top" element={<Top10Page />} />
+              <Route path="/status" element={<ClientStatus />} />
               <Route path="/targets/:id" element={<TargetDetail />} />
               <Route path="/targets" element={<AdminGate what="targets"><TargetManager /></AdminGate>} />
               <Route path="/groups"  element={<AdminGate what="groups & SLA"><GroupManager /></AdminGate>} />

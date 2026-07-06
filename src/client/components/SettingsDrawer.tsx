@@ -12,8 +12,9 @@ interface Props {
 }
 
 const NAV_PUBLIC = [
-  { path: '/',    label: 'Dashboard', icon: '◎' },
-  { path: '/top', label: 'Top 10',    icon: '★' },
+  { path: '/',       label: 'Dashboard',     icon: '◎' },
+  { path: '/status', label: 'Client status', icon: '♥' },
+  { path: '/top',    label: 'Top 10',        icon: '★' },
 ];
 const NAV_ADMIN = [
   { path: '/targets',  label: 'Targets',       icon: '🎯' },
@@ -219,7 +220,7 @@ export default function SettingsDrawer({ open, onClose, canEdit }: Props) {
           </div>
 
           {err && (
-            <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{err}</div>
+            <div style={{ color: 'var(--crit)', fontSize: 12, marginTop: 8 }}>{err}</div>
           )}
         </div>
       </aside>

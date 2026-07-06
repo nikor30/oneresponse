@@ -233,7 +233,7 @@ export default function DeviceManager() {
             <button type="button" style={secondaryBtn} onClick={() => { setEditingId(null); setForm(emptyForm); }}>Cancel</button>
           )}
         </div>
-        {error && <div style={{ color: '#dc2626', marginTop: 8, fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--crit)', marginTop: 8, fontSize: 13 }}>{error}</div>}
       </form>
 
       <h2 style={{ fontSize: 16, margin: '0 0 10px', color: 'var(--text)' }}>Configured devices</h2>
@@ -260,8 +260,8 @@ export default function DeviceManager() {
                   <td style={{ ...td, textAlign: 'center' }}>{d.snmp_version}</td>
                   <td style={{ ...td, textAlign: 'center' }}>
                     {!d.enabled ? <span style={{ color: 'var(--text-dim)' }}>Disabled</span>
-                     : hasErr ? <span style={{ color: '#dc2626' }}>⚠ Error</span>
-                     : d.last_seen ? <span style={{ color: '#16a34a' }}>✓ OK</span>
+                     : hasErr ? <span style={{ color: 'var(--crit)' }}>⚠ Error</span>
+                     : d.last_seen ? <span style={{ color: 'var(--ok)' }}>✓ OK</span>
                      : <span style={{ color: 'var(--text-dim)' }}>Never tried</span>}
                   </td>
                   <td style={{ ...td, color: 'var(--text-muted)' }}>
@@ -272,7 +272,7 @@ export default function DeviceManager() {
                     <button onClick={() => onDiscover(d)} style={smallBtn}>Discover</button>{' '}
                     <button onClick={() => onDiagnose(d)} disabled={!!diagnosing[d.id]} style={smallBtn} title="Run one poll cycle in-process and show raw values">{diagnosing[d.id] ? 'Debugging…' : 'Debug'}</button>{' '}
                     <button onClick={() => onEdit(d)} style={smallBtn}>Edit</button>{' '}
-                    <button onClick={() => onDelete(d.id)} style={{ ...smallBtn, background: '#fee', color: '#dc2626' }}>Delete</button>
+                    <button onClick={() => onDelete(d.id)} style={{ ...smallBtn, background: 'var(--crit-bg)', color: 'var(--crit)' }}>Delete</button>
                   </td>
                 </tr>
                 {(result || d.last_error) && (
@@ -281,7 +281,7 @@ export default function DeviceManager() {
                       <div style={{
                         background: hasErr ? 'rgba(220,38,38,0.08)' : 'rgba(34,197,94,0.08)',
                         border: `1px solid ${hasErr ? 'rgba(220,38,38,0.35)' : 'rgba(34,197,94,0.35)'}`,
-                        color: hasErr ? '#dc2626' : 'var(--text)',
+                        color: hasErr ? 'var(--crit)' : 'var(--text)',
                         padding: '8px 12px', borderRadius: 6, fontSize: 12, lineHeight: 1.5,
                       }}>
                         {result ? (result.ok
@@ -295,7 +295,7 @@ export default function DeviceManager() {
                 {diagnoseErr[d.id] && (
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <td colSpan={6} style={{ padding: '0 16px 12px' }}>
-                      <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.35)', color: '#dc2626', padding: '8px 12px', borderRadius: 6, fontSize: 12 }}>
+                      <div style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.35)', color: 'var(--crit)', padding: '8px 12px', borderRadius: 6, fontSize: 12 }}>
                         <strong>Debug failed</strong> — {diagnoseErr[d.id]}
                       </div>
                     </td>
@@ -327,7 +327,7 @@ export default function DeviceManager() {
             <button onClick={() => { setOpsFor(null); setOps([]); }} style={smallBtn}>Close</button>
           </div>
           {opsLoading && <div style={{ color: 'var(--text-dim)', fontSize: 12 }}>Walking rttMonCtrlAdminTable…</div>}
-          {opsErr && <div style={{ color: '#dc2626', fontSize: 13 }}>{opsErr}</div>}
+          {opsErr && <div style={{ color: 'var(--crit)', fontSize: 13 }}>{opsErr}</div>}
           {ops.length > 0 && (
             <>
               <table style={{ ...tableStyle, marginTop: 10, marginBottom: 12 }}>
@@ -372,7 +372,7 @@ export default function DeviceManager() {
                 <button onClick={onImport} disabled={importing || groups.length === 0} style={primaryBtn}>
                   {importing ? 'Importing…' : 'Import selected as targets'}
                 </button>
-                {importMsg && <span style={{ fontSize: 12, color: importMsg.startsWith('Import failed') ? '#dc2626' : '#16a34a' }}>{importMsg}</span>}
+                {importMsg && <span style={{ fontSize: 12, color: importMsg.startsWith('Import failed') ? 'var(--crit)' : 'var(--ok)' }}>{importMsg}</span>}
               </div>
             </>
           )}
@@ -443,13 +443,13 @@ function DiagnosticsPanel({ data, onClose }: { data: DeviceDiagnostics; onClose:
         <span style={{
           display: 'inline-block', padding: '2px 8px', borderRadius: 4, marginRight: 8,
           background: data.snmp_test.ok ? 'rgba(34,197,94,0.15)' : 'rgba(220,38,38,0.15)',
-          color: data.snmp_test.ok ? '#16a34a' : '#dc2626',
+          color: data.snmp_test.ok ? 'var(--ok)' : 'var(--crit)',
           fontWeight: 600,
         }}>
           SNMP {data.snmp_test.ok ? 'OK' : 'FAIL'}
         </span>
         {data.snmp_test.ok && data.snmp_test.sysName && <span style={{ color: 'var(--text-muted)' }}>sysName: <code style={code}>{data.snmp_test.sysName}</code></span>}
-        {!data.snmp_test.ok && <span style={{ color: '#dc2626' }}>{data.snmp_test.error}</span>}
+        {!data.snmp_test.ok && <span style={{ color: 'var(--crit)' }}>{data.snmp_test.error}</span>}
       </div>
 
       {data.hint && (
@@ -487,12 +487,12 @@ function DiagnosticsPanel({ data, onClose }: { data: DeviceDiagnostics; onClose:
               <span style={{
                 padding: '1px 8px', borderRadius: 4,
                 background: looksGood ? 'rgba(34,197,94,0.15)' : 'rgba(220,38,38,0.15)',
-                color: looksGood ? '#16a34a' : '#dc2626',
+                color: looksGood ? 'var(--ok)' : 'var(--crit)',
                 fontWeight: 600, fontSize: 11,
               }}>{looksGood ? 'OK' : r.error ? 'SNMP ERR' : 'DOWN SAMPLE'}</span>
             </div>
             {r.note && <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>{r.note}</div>}
-            {r.error && <div style={{ color: '#dc2626', marginTop: 4 }}>SNMP error: {r.error}</div>}
+            {r.error && <div style={{ color: 'var(--crit)', marginTop: 4 }}>SNMP error: {r.error}</div>}
 
             {r.varbinds && (
               <div style={{ marginTop: 8 }}>
@@ -503,7 +503,7 @@ function DiagnosticsPanel({ data, onClose }: { data: DeviceDiagnostics; onClose:
                       <tr key={vb.oid}>
                         <td style={{ padding: '2px 8px 2px 0', color: 'var(--text)', whiteSpace: 'nowrap' }}>{vb.name}</td>
                         <td style={{ padding: '2px 8px', color: 'var(--text-muted)' }}>{vb.oid}</td>
-                        <td style={{ padding: '2px 0', color: vb.value == null ? '#dc2626' : 'var(--text)', textAlign: 'right' }}>
+                        <td style={{ padding: '2px 0', color: vb.value == null ? 'var(--crit)' : 'var(--text)', textAlign: 'right' }}>
                           {vb.value == null ? '<null>' : String(vb.value)}
                         </td>
                       </tr>

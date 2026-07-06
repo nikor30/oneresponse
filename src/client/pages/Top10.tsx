@@ -100,14 +100,14 @@ export default function Top10Page() {
       }}>
         <RankingTable
           title="Best performing"
-          accent="#16a34a"
+          accent="var(--ok)"
           rows={best}
           onRowClick={onRowClick}
           showMultipleNodes={nodes.length > 1}
         />
         <RankingTable
           title="Worst performing"
-          accent="#dc2626"
+          accent="var(--crit)"
           rows={worst}
           onRowClick={onRowClick}
           showMultipleNodes={nodes.length > 1}
@@ -218,7 +218,7 @@ function RankingTable({
                 <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)' }}>
                   {r.target.jitter != null ? r.target.jitter.toFixed(2) : '—'}
                 </td>
-                <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: (r.target.loss_pct ?? 0) > 0 ? '#dc2626' : 'var(--text-muted)' }}>
+                <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: (r.target.loss_pct ?? 0) > 0 ? 'var(--crit)' : 'var(--text-muted)' }}>
                   {r.target.loss_pct != null ? `${r.target.loss_pct.toFixed(1)}%` : '—'}
                 </td>
               </tr>
@@ -235,7 +235,7 @@ function RankingTable({
 
 function ScoreCell({ value }: { value: number | null }) {
   if (value == null) return <span style={{ color: 'var(--text-dim)' }}>—</span>;
-  const color = value >= 70 ? '#16a34a' : '#dc2626';
+  const color = value >= 70 ? 'var(--ok)' : 'var(--crit)';
   return (
     <span style={{
       display: 'inline-block',
