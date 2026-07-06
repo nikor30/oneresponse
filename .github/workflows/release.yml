@@ -1,18 +1,13 @@
-# Manually dispatched release workflow: tags the current commit on the chosen
-# branch and publishes a GitHub Release. Release notes are taken from the
-# newest section of CHANGELOG.md unless custom notes are provided.
+# Release-on-version-bump: every push to main reads package.json; if that
+# version has no GitHub Release yet, the commit is tagged v<version> and a
+# release is published with notes from the newest CHANGELOG.md section.
+# Idempotent — pushes that don't change the version do nothing.
 name: Release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to create (e.g. v1.1.0)'
-        required: true
-      title:
-        description: 'Release title (defaults to "oneresponse <tag>")'
-        required: false
-        default: ''
 
 permissions:
   contents: write
@@ -23,24 +18,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read version
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Check if already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.ver.outputs.version }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract latest changelog section
+        if: steps.check.outputs.exists == 'false'
         run: |
           if [ -f CHANGELOG.md ]; then
             awk '/^## /{n++} n==1' CHANGELOG.md > /tmp/notes.md
           fi
           if [ ! -s /tmp/notes.md ]; then
-            echo "Release ${{ inputs.tag }}" > /tmp/notes.md
+            echo "Release v${{ steps.ver.outputs.version }}" > /tmp/notes.md
           fi
 
       - name: Create tag and release
+        if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TITLE="${{ inputs.title }}"
-          if [ -z "$TITLE" ]; then
-            TITLE="oneresponse ${{ inputs.tag }}"
-          fi
-          gh release create "${{ inputs.tag }}" \
+          gh release create "v${{ steps.ver.outputs.version }}" \
             --target "$GITHUB_SHA" \
-            --title "$TITLE" \
+            --title "oneresponse v${{ steps.ver.outputs.version }}" \
             --notes-file /tmp/notes.md
