@@ -3,7 +3,7 @@ import { probe, type ProbeResult } from './prober.js';
 import { calculateSlaScore } from './scoring.js';
 import { pushToPeers } from '../peer/client.js';
 import { noteProbe } from '../syslog.js';
-import { pollAllOperations, type DeviceTarget } from './cisco/collector.js';
+import { pollAllOperations, type DeviceTarget, type CiscoProbeResult } from './cisco/collector.js';
 import { decryptSecret } from './cisco/secret.js';
 import type { CiscoDeviceConn } from './cisco/snmp.js';
 import type { OperKind } from './cisco/mibConstants.js';
@@ -52,7 +52,7 @@ const timers: ReturnType<typeof setInterval>[] = [];
 // ── Common path: write a measurement, push to peers, fire syslog ──
 function recordMeasurement(
   target: Target,
-  result: ProbeResult & { mos?: number | null },
+  result: CiscoProbeResult,
   source: 'local' | 'cisco',
 ): void {
   const slaScore = calculateSlaScore(
@@ -62,11 +62,14 @@ function recordMeasurement(
 
   const db = getDb();
   const timestamp = Math.floor(Date.now() / 1000);
+  const x = result.ipsla ?? null; // extended udp-jitter datapoints (null for ICMP/echo)
 
   const insertResult = db.prepare(`
     INSERT INTO measurements (target_id, peer_id, timestamp, latency_min, latency_avg, latency_max,
-                              jitter, loss_pct, probe_count, rtts, sla_score, mos, source)
-    VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              jitter, loss_pct, probe_count, rtts, sla_score, mos, source,
+                              ow_sd_min, ow_sd_avg, ow_sd_max, ow_ds_min, ow_ds_avg, ow_ds_max,
+                              jitter_sd, jitter_ds, loss_sd, loss_ds, pkt_oos, pkt_mia, pkt_late, icpif)
+    VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     target.id,
     timestamp,
@@ -80,6 +83,12 @@ function recordMeasurement(
     slaScore,
     result.mos ?? null,
     source,
+    x?.ow_sd_min ?? null, x?.ow_sd_avg ?? null, x?.ow_sd_max ?? null,
+    x?.ow_ds_min ?? null, x?.ow_ds_avg ?? null, x?.ow_ds_max ?? null,
+    x?.jitter_sd ?? null, x?.jitter_ds ?? null,
+    x?.loss_sd ?? null, x?.loss_ds ?? null,
+    x?.pkt_oos ?? null, x?.pkt_mia ?? null, x?.pkt_late ?? null,
+    x?.icpif ?? null,
   );
 
   if (source === 'cisco') {
@@ -108,6 +117,8 @@ function recordMeasurement(
     probe_count: result.probe_count,
     rtts: result.rtts,
     sla_score: slaScore,
+    mos: result.mos ?? null,
+    ...(x ?? {}),
   });
 
   try {

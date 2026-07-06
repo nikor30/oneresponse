@@ -17,6 +17,22 @@ interface MeasurementRow {
   probe_count: number | null;
   sla_score: number | null;
   rtts: number[] | null;
+  mos: number | null;
+  // Extended Cisco IP SLA (udp-jitter) datapoints — null for ICMP rows.
+  ow_sd_min: number | null;
+  ow_sd_avg: number | null;
+  ow_sd_max: number | null;
+  ow_ds_min: number | null;
+  ow_ds_avg: number | null;
+  ow_ds_max: number | null;
+  jitter_sd: number | null;
+  jitter_ds: number | null;
+  loss_sd: number | null;
+  loss_ds: number | null;
+  pkt_oos: number | null;
+  pkt_mia: number | null;
+  pkt_late: number | null;
+  icpif: number | null;
 }
 
 interface TargetMetaRow {
@@ -38,7 +54,9 @@ function queryMeasurements(
     // Server-side downsampling: aggregate into time buckets so very long
     // ranges (7d/30d) stay performant and don't blow past the row limit.
     // We drop individual rtts in bucketed mode — the SmokePing-style chart
-    // falls back to min/max range for the smoke band.
+    // falls back to min/max range for the smoke band. Extended IP SLA
+    // columns aggregate like their base counterparts: mins MIN, maxes MAX,
+    // averages AVG, packet counters SUM.
     return db.prepare(`
       SELECT
         0 AS id,
@@ -52,7 +70,22 @@ function queryMeasurements(
         AVG(loss_pct)    AS loss_pct,
         SUM(probe_count) AS probe_count,
         AVG(sla_score)   AS sla_score,
-        NULL             AS rtts
+        NULL             AS rtts,
+        AVG(mos)         AS mos,
+        MIN(ow_sd_min)   AS ow_sd_min,
+        AVG(ow_sd_avg)   AS ow_sd_avg,
+        MAX(ow_sd_max)   AS ow_sd_max,
+        MIN(ow_ds_min)   AS ow_ds_min,
+        AVG(ow_ds_avg)   AS ow_ds_avg,
+        MAX(ow_ds_max)   AS ow_ds_max,
+        AVG(jitter_sd)   AS jitter_sd,
+        AVG(jitter_ds)   AS jitter_ds,
+        SUM(loss_sd)     AS loss_sd,
+        SUM(loss_ds)     AS loss_ds,
+        SUM(pkt_oos)     AS pkt_oos,
+        SUM(pkt_mia)     AS pkt_mia,
+        SUM(pkt_late)    AS pkt_late,
+        AVG(icpif)       AS icpif
       FROM measurements
       WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
       GROUP BY CAST(timestamp / ? AS INTEGER)
@@ -62,7 +95,9 @@ function queryMeasurements(
   }
   const rows = db.prepare(`
     SELECT id, target_id, peer_id, timestamp, latency_min, latency_avg, latency_max,
-           jitter, loss_pct, probe_count, sla_score, rtts
+           jitter, loss_pct, probe_count, sla_score, rtts, mos,
+           ow_sd_min, ow_sd_avg, ow_sd_max, ow_ds_min, ow_ds_avg, ow_ds_max,
+           jitter_sd, jitter_ds, loss_sd, loss_ds, pkt_oos, pkt_mia, pkt_late, icpif
     FROM measurements
     WHERE target_id = ? AND timestamp >= ? AND timestamp <= ?
     ORDER BY timestamp ASC
@@ -104,6 +139,11 @@ const EXPORT_COLUMNS = [
   'timestamp_iso', 'timestamp_unix',
   'latency_min_ms', 'latency_avg_ms', 'latency_max_ms',
   'jitter_ms', 'loss_pct', 'probe_count', 'sla_score',
+  'mos', 'icpif',
+  'ow_sd_min_ms', 'ow_sd_avg_ms', 'ow_sd_max_ms',
+  'ow_ds_min_ms', 'ow_ds_avg_ms', 'ow_ds_max_ms',
+  'jitter_sd_ms', 'jitter_ds_ms',
+  'loss_sd_pkts', 'loss_ds_pkts', 'pkt_out_of_seq', 'pkt_mia', 'pkt_late',
 ];
 
 function measurementRowToCsv(m: MeasurementRow, meta: TargetMetaRow): Record<string, unknown> {
@@ -122,6 +162,21 @@ function measurementRowToCsv(m: MeasurementRow, meta: TargetMetaRow): Record<str
     loss_pct: m.loss_pct,
     probe_count: m.probe_count,
     sla_score: m.sla_score,
+    mos: m.mos,
+    icpif: m.icpif,
+    ow_sd_min_ms: m.ow_sd_min,
+    ow_sd_avg_ms: m.ow_sd_avg,
+    ow_sd_max_ms: m.ow_sd_max,
+    ow_ds_min_ms: m.ow_ds_min,
+    ow_ds_avg_ms: m.ow_ds_avg,
+    ow_ds_max_ms: m.ow_ds_max,
+    jitter_sd_ms: m.jitter_sd,
+    jitter_ds_ms: m.jitter_ds,
+    loss_sd_pkts: m.loss_sd,
+    loss_ds_pkts: m.loss_ds,
+    pkt_out_of_seq: m.pkt_oos,
+    pkt_mia: m.pkt_mia,
+    pkt_late: m.pkt_late,
   };
 }
 

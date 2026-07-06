@@ -11,6 +11,23 @@ interface MeasurementData {
   probe_count: number;
   rtts: number[];
   sla_score: number;
+  mos?: number | null;
+  // Extended Cisco IP SLA (udp-jitter) datapoints — optional so older
+  // peers keep working; the receiver stores whatever is present.
+  ow_sd_min?: number | null;
+  ow_sd_avg?: number | null;
+  ow_sd_max?: number | null;
+  ow_ds_min?: number | null;
+  ow_ds_avg?: number | null;
+  ow_ds_max?: number | null;
+  jitter_sd?: number | null;
+  jitter_ds?: number | null;
+  loss_sd?: number | null;
+  loss_ds?: number | null;
+  pkt_oos?: number | null;
+  pkt_mia?: number | null;
+  pkt_late?: number | null;
+  icpif?: number | null;
 }
 
 interface Peer {

@@ -47,49 +47,69 @@ export const RTT_MON_LATEST_RTT_OPER_SENSE           = '1.3.6.1.4.1.9.9.42.1.2.1
 // ── rttMonLatestJitterOperTable: 1.3.6.1.4.1.9.9.42.1.5.2 ───────────
 // Latest result for udp-jitter operations.
 //
-// Column layout per the current CISCO-RTTMON-MIB
-// (verified against ios-xe 17.x MIB bundle and Cisco's published MIB
-// browser). The mistake to avoid: columns 1-30 are the per-direction
-// jitter sample counters (positives/negatives, SD/DS, min/max/num/sum/
-// sum-squared). The packet-loss / sense fields start at column 31.
+// Column layout per the canonical CISCO-RTTMON-MIB, cross-checked
+// against oidref.com (https://oidref.com/1.3.6.1.4.1.9.9.42.1.5.2.1)
+// and the OIDs used by LibreNMS / SolarWinds IP SLA templates
+// (rttMonLatestJitterOperSense = .31, MOS = .42, ICPIF = .43).
+//
+// NOTE: an earlier revision of this file used a shifted layout
+// (RTTMin=5, PacketLossSD=31, Sense=36, …) that does not match the
+// published MIB — it read Sense where PacketLossSD lives and RTTMax as
+// RTTMin. If a device ever disagrees with the numbering below, the
+// /devices/:id/diagnostics endpoint dumps every raw varbind so the
+// mapping can be verified in minutes.
 //
 //   col 1  = NumOfRTT
 //   col 2  = RTTSum
-//   col 5  = RTTMin                     (ms)
-//   col 6  = RTTMax                     (ms)
-//   col 9  = NumOfPositivesSD
-//   col 10 = SumOfPositivesSD
-//   col 15 = NumOfNegativesSD
-//   col 16 = SumOfNegativesSD
-//   col 21 = NumOfPositivesDS
-//   col 22 = SumOfPositivesDS
-//   col 27 = NumOfNegativesDS
-//   col 28 = SumOfNegativesDS
-//   col 31 = PacketLossSD               (source-to-destination loss)
-//   col 32 = PacketLossDS               (destination-to-source loss)
-//   col 33 = PacketOutOfSequence
-//   col 34 = PacketMIA                  (missing in action)
-//   col 35 = PacketLateArrival
-//   col 36 = Sense                      (operation result enum, see SENSE_OK)
+//   col 3  = RTTSum2
+//   col 4  = RTTMin                     (ms)
+//   col 5  = RTTMax                     (ms)
+//   col 6  = MinOfPositivesSD    col 7  = MaxOfPositivesSD
+//   col 8  = NumOfPositivesSD    col 9  = SumOfPositivesSD
+//   col 11 = MinOfNegativesSD    col 12 = MaxOfNegativesSD
+//   col 13 = NumOfNegativesSD    col 14 = SumOfNegativesSD
+//   col 16 = MinOfPositivesDS    col 17 = MaxOfPositivesDS
+//   col 18 = NumOfPositivesDS    col 19 = SumOfPositivesDS
+//   col 21 = MinOfNegativesDS    col 22 = MaxOfNegativesDS
+//   col 23 = NumOfNegativesDS    col 24 = SumOfNegativesDS
+//   col 26 = PacketLossSD               (source→destination loss)
+//   col 27 = PacketLossDS               (destination→source loss)
+//   col 28 = PacketOutOfSequence
+//   col 29 = PacketMIA                  (missing in action)
+//   col 30 = PacketLateArrival
+//   col 31 = Sense                      (operation result enum, see SENSE_OK)
+//   col 33 = OWSumSD   col 35 = OWMinSD   col 36 = OWMaxSD   (one-way S→D, ms; needs NTP sync)
+//   col 37 = OWSumDS   col 39 = OWMinDS   col 40 = OWMaxDS   (one-way D→S, ms; needs NTP sync)
+//   col 41 = NumOfOW                    (number of successful one-way samples)
 //   col 42 = MOS                        (× 100 — divide by 100 to get score)
+//   col 43 = ICPIF                      (Calculated Planning Impairment Factor)
 export const RTT_MON_LATEST_JITTER_NUM_RTT     = '1.3.6.1.4.1.9.9.42.1.5.2.1.1';
 export const RTT_MON_LATEST_JITTER_RTT_SUM     = '1.3.6.1.4.1.9.9.42.1.5.2.1.2';
-export const RTT_MON_LATEST_JITTER_RTT_MIN     = '1.3.6.1.4.1.9.9.42.1.5.2.1.5';
-export const RTT_MON_LATEST_JITTER_RTT_MAX     = '1.3.6.1.4.1.9.9.42.1.5.2.1.6';
-export const RTT_MON_LATEST_JITTER_NUM_POS_SD  = '1.3.6.1.4.1.9.9.42.1.5.2.1.9';
-export const RTT_MON_LATEST_JITTER_SUM_POS_SD  = '1.3.6.1.4.1.9.9.42.1.5.2.1.10';
-export const RTT_MON_LATEST_JITTER_NUM_NEG_SD  = '1.3.6.1.4.1.9.9.42.1.5.2.1.15';
-export const RTT_MON_LATEST_JITTER_SUM_NEG_SD  = '1.3.6.1.4.1.9.9.42.1.5.2.1.16';
-export const RTT_MON_LATEST_JITTER_NUM_POS_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.21';
-export const RTT_MON_LATEST_JITTER_SUM_POS_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.22';
-export const RTT_MON_LATEST_JITTER_NUM_NEG_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.27';
-export const RTT_MON_LATEST_JITTER_SUM_NEG_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.28';
-export const RTT_MON_LATEST_JITTER_LOSS_SD     = '1.3.6.1.4.1.9.9.42.1.5.2.1.31';
-export const RTT_MON_LATEST_JITTER_LOSS_DS     = '1.3.6.1.4.1.9.9.42.1.5.2.1.32';
-export const RTT_MON_LATEST_JITTER_OOS         = '1.3.6.1.4.1.9.9.42.1.5.2.1.33';
-export const RTT_MON_LATEST_JITTER_MIA         = '1.3.6.1.4.1.9.9.42.1.5.2.1.34';
-export const RTT_MON_LATEST_JITTER_SENSE       = '1.3.6.1.4.1.9.9.42.1.5.2.1.36';
+export const RTT_MON_LATEST_JITTER_RTT_MIN     = '1.3.6.1.4.1.9.9.42.1.5.2.1.4';
+export const RTT_MON_LATEST_JITTER_RTT_MAX     = '1.3.6.1.4.1.9.9.42.1.5.2.1.5';
+export const RTT_MON_LATEST_JITTER_NUM_POS_SD  = '1.3.6.1.4.1.9.9.42.1.5.2.1.8';
+export const RTT_MON_LATEST_JITTER_SUM_POS_SD  = '1.3.6.1.4.1.9.9.42.1.5.2.1.9';
+export const RTT_MON_LATEST_JITTER_NUM_NEG_SD  = '1.3.6.1.4.1.9.9.42.1.5.2.1.13';
+export const RTT_MON_LATEST_JITTER_SUM_NEG_SD  = '1.3.6.1.4.1.9.9.42.1.5.2.1.14';
+export const RTT_MON_LATEST_JITTER_NUM_POS_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.18';
+export const RTT_MON_LATEST_JITTER_SUM_POS_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.19';
+export const RTT_MON_LATEST_JITTER_NUM_NEG_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.23';
+export const RTT_MON_LATEST_JITTER_SUM_NEG_DS  = '1.3.6.1.4.1.9.9.42.1.5.2.1.24';
+export const RTT_MON_LATEST_JITTER_LOSS_SD     = '1.3.6.1.4.1.9.9.42.1.5.2.1.26';
+export const RTT_MON_LATEST_JITTER_LOSS_DS     = '1.3.6.1.4.1.9.9.42.1.5.2.1.27';
+export const RTT_MON_LATEST_JITTER_OOS         = '1.3.6.1.4.1.9.9.42.1.5.2.1.28';
+export const RTT_MON_LATEST_JITTER_MIA         = '1.3.6.1.4.1.9.9.42.1.5.2.1.29';
+export const RTT_MON_LATEST_JITTER_LATE        = '1.3.6.1.4.1.9.9.42.1.5.2.1.30';
+export const RTT_MON_LATEST_JITTER_SENSE       = '1.3.6.1.4.1.9.9.42.1.5.2.1.31';
+export const RTT_MON_LATEST_JITTER_OW_SUM_SD   = '1.3.6.1.4.1.9.9.42.1.5.2.1.33';
+export const RTT_MON_LATEST_JITTER_OW_MIN_SD   = '1.3.6.1.4.1.9.9.42.1.5.2.1.35';
+export const RTT_MON_LATEST_JITTER_OW_MAX_SD   = '1.3.6.1.4.1.9.9.42.1.5.2.1.36';
+export const RTT_MON_LATEST_JITTER_OW_SUM_DS   = '1.3.6.1.4.1.9.9.42.1.5.2.1.37';
+export const RTT_MON_LATEST_JITTER_OW_MIN_DS   = '1.3.6.1.4.1.9.9.42.1.5.2.1.39';
+export const RTT_MON_LATEST_JITTER_OW_MAX_DS   = '1.3.6.1.4.1.9.9.42.1.5.2.1.40';
+export const RTT_MON_LATEST_JITTER_NUM_OW      = '1.3.6.1.4.1.9.9.42.1.5.2.1.41';
 export const RTT_MON_LATEST_JITTER_MOS         = '1.3.6.1.4.1.9.9.42.1.5.2.1.42';
+export const RTT_MON_LATEST_JITTER_ICPIF       = '1.3.6.1.4.1.9.9.42.1.5.2.1.43';
 
 // ── Enums ──────────────────────────────────────────────────────────
 // rttMonCtrlAdminRttType — operation type enum

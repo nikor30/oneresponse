@@ -60,7 +60,25 @@ CREATE TABLE IF NOT EXISTS measurements (
   rtts TEXT,
   sla_score REAL,
   mos REAL,
-  source TEXT
+  source TEXT,
+  -- Extended Cisco IP SLA (udp-jitter) datapoints. NULL for ICMP and
+  -- echo-style operations. One-way values are milliseconds and require
+  -- NTP sync between source and responder; loss/pkt_* are raw packet
+  -- counts per poll cycle.
+  ow_sd_min REAL,
+  ow_sd_avg REAL,
+  ow_sd_max REAL,
+  ow_ds_min REAL,
+  ow_ds_avg REAL,
+  ow_ds_max REAL,
+  jitter_sd REAL,
+  jitter_ds REAL,
+  loss_sd INTEGER,
+  loss_ds INTEGER,
+  pkt_oos INTEGER,
+  pkt_mia INTEGER,
+  pkt_late INTEGER,
+  icpif REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_measurements_target_ts

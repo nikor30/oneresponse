@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, type Target, type Measurement } from '../api/client';
 import SmokePingGraph from './SmokePingGraph';
+import IpSlaGraph from './IpSlaGraph';
 
 const TIME_RANGES = [
   { label: '1h',  seconds: 3600 },
@@ -239,6 +240,15 @@ export default function TargetDetailModal({ targetId, onClose }: Props) {
                 probeIntervalSec={target.probe_interval}
               />
             </div>
+
+            {target.probe_type === 'cisco-ipsla' && (
+              <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>
+                  IP SLA metrics
+                </div>
+                <IpSlaGraph measurements={measurements} from={from} to={to} />
+              </div>
+            )}
           </div>
         )}
       </div>
