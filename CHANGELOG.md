@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 — 2026-07-06
+## 1.1.0 — 2026-07-06
 
 ### Look & feel
 - New VMware vRNI / Clarity-inspired design: deep blue-teal dark theme (now the
@@ -48,8 +48,8 @@
 - Production start (`npm start`) no longer crashes on Node 22+ (replaced the
   removed `import … assert { type: 'json' }` syntax).
 
-## 0.1.0
+## 1.0 — 2026-03-08 ("Working Stable")
 
-Initial release: dart/bullseye SLA radar, SmokePing-style time-series graphs,
+First stable release: dart/bullseye SLA radar, SmokePing-style time-series graphs,
 ICMP probing, Cisco IP SLA collection via SNMP, groups with SLA thresholds,
 peers, API keys, CSV import/export, and Docker deployment.
